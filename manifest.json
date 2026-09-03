@@ -1,0 +1,17 @@
+{
+  "name": "Recepții camioane",
+  "short_name": "Recepții",
+  "description": "Evidența camioanelor descărcate: furnizor, nr. auto, paleți, probleme și cronometru pe etape.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F3F5F8",
+  "theme_color": "#245C9E",
+  "lang": "ro",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

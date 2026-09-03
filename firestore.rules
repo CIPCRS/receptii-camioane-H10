@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Lista operatorilor (nume + email convențional, fără PIN) trebuie citită
+    // înainte de login, ca să apară butoanele cu nume pe ecranul de conectare.
+    // Scrierea: doar administratorii; excepție la prima configurare (documentul nu există încă).
+    match /public/operators {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null
+        && request.auth.token.email in resource.data.admins;
+    }
+
+    // Tot restul (recepții, furnizori, setări): doar utilizatori autentificați.
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
