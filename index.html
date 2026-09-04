@@ -292,6 +292,13 @@ input,select,textarea{font-size:16px}
 .prow .pmeta{font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;margin-top:2px}
 .prow .pact{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 .prow.late{border-color:var(--warn)}
+.prow.urgent{border-color:var(--bad);box-shadow:inset 3px 0 0 var(--bad)}
+.urg{display:inline-flex;align-items:center;gap:4px;background:var(--bad);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;letter-spacing:.04em;white-space:nowrap}
+.urgwhy{font-size:12.5px;color:var(--bad);margin-top:2px}
+.rk{display:inline-flex;gap:2px}
+.rk button{border:1px solid var(--line2);background:var(--surface);border-radius:5px;width:28px;height:26px;cursor:pointer;font-size:12px;padding:0}
+.rk button:disabled{opacity:.3;cursor:default}
+tr.urgentrow td{box-shadow:inset 3px 0 0 var(--bad)}
 .st{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:500;white-space:nowrap}
 .st.planned{background:var(--surface2);color:var(--ink2)} .st.arrived{background:var(--warn-soft);color:var(--warn)} .st.receiving{background:var(--accent-soft);color:var(--accent)} .st.done{background:var(--ok-soft);color:var(--ok)} .st.cancelled{background:var(--bad-soft);color:var(--bad)} .st.noshow{background:var(--bad-soft);color:var(--bad)}
 .daynav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
@@ -407,9 +414,9 @@ input,select,textarea{font-size:16px}
       </div>
       <div class="sec">
         <h2>Operatori</h2>
-        <p>Persoanele care se pot conecta, fiecare cu un singur rol: <b>Depozit</b> (pornește recepții planificate sau neplanificate, marchează sosirea, corectează și redeschide recepții, adaugă furnizori noi și probleme în catalog), <b>Planificator</b> (introduce, modifică și anulează programări; nu atinge recepțiile), <b>Vizualizare</b> (vede totul în timp real, filtrează și exportă, nu modifică nimic), <b>Administrator</b> (toate drepturile, inclusiv ștergeri, timpi standard, operatori). <span class="admin-only">Ca administrator poți adăuga operatori (nume + PIN) și îi poți dezactiva. Pentru a reseta PIN-ul altcuiva: dezactivează-l aici, șterge utilizatorul din Firebase Console → Authentication, apoi adaugă-l din nou cu PIN nou.</span></p>
+        <p>Persoanele care se pot conecta, fiecare cu un singur rol: <b>Depozit</b> (pornește recepții planificate sau neplanificate, marchează sosirea, corectează și redeschide recepții, adaugă furnizori noi și probleme în catalog), <b>Planificator</b> (introduce, modifică și anulează programări, marchează urgențe; nu atinge recepțiile), <b>Planificator admin</b> (ca planificatorul, în plus stabilește ordinea urgențelor #1, #2…), <b>Vizualizare</b> (vede totul în timp real, filtrează și exportă, nu modifică nimic), <b>Administrator</b> (toate drepturile, inclusiv ștergeri, timpi standard, operatori). <span class="admin-only">Ca administrator poți adăuga operatori (nume + PIN) și îi poți dezactiva. Pentru a reseta PIN-ul altcuiva: dezactivează-l aici, șterge utilizatorul din Firebase Console → Authentication, apoi adaugă-l din nou cu PIN nou.</span></p>
         <div class="chips" id="opList" style="margin-bottom:10px"></div>
-        <div class="inl admin-only"><input id="opNew" placeholder="Nume operator"><input id="opPin" class="pinfield" inputmode="numeric" maxlength="6" placeholder="PIN (6 cifre)"><select id="opRole" class="rosel" style="padding:7px 10px;font-size:14px"><option value="warehouse">Depozit</option><option value="planner">Planificator</option><option value="viewer">Vizualizare</option><option value="admin">Administrator</option></select><button class="btn" id="opAdd">Adaugă</button></div>
+        <div class="inl admin-only"><input id="opNew" placeholder="Nume operator"><input id="opPin" class="pinfield" inputmode="numeric" maxlength="6" placeholder="PIN (6 cifre)"><select id="opRole" class="rosel" style="padding:7px 10px;font-size:14px"><option value="warehouse">Depozit</option><option value="planner">Planificator</option><option value="planner_admin">Planificator admin (urgențe)</option><option value="viewer">Vizualizare</option><option value="admin">Administrator</option></select><button class="btn" id="opAdd">Adaugă</button></div>
       </div>
       <div class="sec">
         <h2>Ziua operațională și schimburile</h2>
@@ -447,8 +454,8 @@ input,select,textarea{font-size:16px}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '2.2.3';
-const ROLES={admin:'Administrator',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare'};
+const APP_VERSION = '2.3.0';
+const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
 const CFG = window.RECEPTII_CONFIG || {};
 const STAGES = [
@@ -510,7 +517,7 @@ const shiftDay = (k,n)=>dayKey(dayKeyToTs(k)+n*86400000);
 const fmtDayKey = k=>{const [y,m,d]=k.split('-');const dn=['Duminică','Luni','Marți','Miercuri','Joi','Vineri','Sâmbătă'][new Date(+y,+m-1,+d).getDay()];return dn+' '+d+'.'+m+'.'+y};
 
 /* ---------- stare ---------- */
-const S = { receptions:[], suppliers:[], problems:[], problemStageMap:{}, photos:{}, photoSubs:{}, photoCounts:{}, uiStage:{}, uploading:{}, operators:[], dayStart:7, shiftHours:8, schedules:[], schedExtra:[], schedDay:null, planners:[], isPlanner:false, role:'viewer', canRecv:false, canPlan:false, rolesMissing:false, admins:[], me:null, isAdmin:false, tab:'active', openRow:null, ready:false };
+const S = { receptions:[], suppliers:[], problems:[], canRank:false, problemStageMap:{}, photos:{}, photoSubs:{}, photoCounts:{}, uiStage:{}, uploading:{}, operators:[], dayStart:7, shiftHours:8, schedules:[], schedExtra:[], schedDay:null, planners:[], isPlanner:false, role:'viewer', canRecv:false, canPlan:false, rolesMissing:false, admins:[], me:null, isAdmin:false, tab:'active', openRow:null, ready:false };
 let fb=null, auth=null, fs=null, pendingRender=false, unsubs=[];
 
 /* ---------- utilitare ---------- */
@@ -641,7 +648,8 @@ function applyRoles(){
   if(!S.me)return;
   S.role=S.admins.includes(S.me.email)?'admin':roleOf(S.me);
   S.isAdmin=S.role==='admin';
-  S.canPlan=S.isAdmin||S.role==='planner';S.isPlanner=S.canPlan;
+  S.canPlan=S.isAdmin||S.role==='planner'||S.role==='planner_admin';S.isPlanner=S.canPlan;
+  S.canRank=S.isAdmin||S.role==='planner_admin';
   S.canRecv=S.isAdmin||S.role==='warehouse';
   document.body.classList.toggle('is-admin',S.isAdmin);
   document.body.classList.toggle('can-plan',S.canPlan);
@@ -711,7 +719,7 @@ const Store = {
   async saveOperators(){
     S.operators.forEach(o=>{o.role=roleOf(o);o.admin=o.role==='admin';o.planner=o.role==='planner'});
     S.admins=S.operators.filter(o=>o.role==='admin'&&o.active!==false).map(o=>o.email);
-    S.planners=S.operators.filter(o=>o.role==='planner'&&o.active!==false).map(o=>o.email);
+    S.planners=S.operators.filter(o=>(o.role==='planner'||o.role==='planner_admin')&&o.active!==false).map(o=>o.email);
     const roles={};S.operators.forEach(o=>{roles[o.email]=o.active===false?'viewer':o.role});
     scheduleRender();
     try{await fs.doc('public/operators').set({list:S.operators,admins:S.admins,planners:S.planners,roles})}catch(e){toast('Nu ai drept de administrator pentru operatori')}
@@ -896,6 +904,17 @@ function schedOf(id){return allSched().find(x=>x.id===id)}
 function recOfSched(sc){return S.receptions.find(r=>r.scheduleId===sc.id&&r.status!=='deleted')}
 function schedStatus(sc){if(sc.status==='cancelled')return 'cancelled';const r=recOfSched(sc);if(r)return r.status==='done'?'done':'receiving';return sc.status||'planned'}
 function slotLabel(h){return pad(h)+':00'}
+function urgKey(sc){return sc.urgent?(sc.urgentRank||9999):Infinity}
+function prioritySort(a,b){const ua=urgKey(a),ub=urgKey(b);if(ua!==ub)return ua-ub;return a.day.localeCompare(b.day)||slotOrder(a.slot)-slotOrder(b.slot)}
+function urgentBadge(sc){return sc.urgent?`<span class="urg">⚠ URGENT${sc.urgentRank?' #'+sc.urgentRank:''}</span>`:''}
+/* slotul a trecut deja? (doar pentru ziua operațională curentă sau zile trecute) */
+function slotIsPast(day,slot){const today=opKey(Date.now());if(day<today)return true;if(day>today)return false;const n=new Date();return slotOrder(slot)<slotOrder(n.getHours())}
+function urgentList(){return allSched().filter(x=>x.urgent&&['planned','arrived','receiving'].includes(schedStatus(x))).sort(prioritySort)}
+function setUrgentRank(sc,newRank){
+  const list=urgentList().filter(x=>x.id!==sc.id);newRank=Math.max(1,Math.min(list.length+1,newRank));
+  list.splice(newRank-1,0,sc);
+  list.forEach((x,i)=>{if(x.urgentRank!==i+1){x.urgentRank=i+1;Store.saveSched(x)}});
+}
 
 function renderPlanned(){
   const el=$('#plannedList');if(!el)return;
@@ -904,13 +923,15 @@ function renderPlanned(){
   if(!open.length){el.innerHTML='';return}
   const now=new Date();const curSlot=slotOrder(now.getHours()+now.getMinutes()/60);
   el.innerHTML=`<h2>Camioane programate, de descărcat <span style="background:var(--accent-soft);color:var(--accent);padding:0 7px;border-radius:10px;font-family:var(--mono)">${open.length}</span></h2>`+
-   open.sort((a,b)=>a.day.localeCompare(b.day)||slotOrder(a.slot)-slotOrder(b.slot)).map(sc=>{
+   open.sort(prioritySort).map((sc,idx,arr)=>{
     const st=schedStatus(sc);const late=sc.day<today||(sc.day===today&&slotOrder(sc.slot)+1<curSlot&&st==='planned');
-    return `<div class="prow ${late?'late':''}" data-sched="${sc.id}">
+    const nU=arr.filter(x=>x.urgent).length;
+    return `<div class="prow ${late?'late':''} ${sc.urgent?'urgent':''}" data-sched="${sc.id}">
       <div class="slot">${slotLabel(sc.slot)}${sc.day<today?`<div class="muted" style="font-size:10px;font-family:var(--sans)">${sc.day.slice(8)}.${sc.day.slice(5,7)}</div>`:''}</div>
-      <div class="pmain"><b>${esc(sc.supplier||'—')}</b> ${sc.plate?`<span class="plate" style="font-size:12px;padding:2px 6px;margin-left:6px">${esc(sc.plate)}</span>`:''}
+      <div class="pmain">${urgentBadge(sc)} <b>${esc(sc.supplier||'—')}</b> ${sc.plate?`<span class="plate" style="font-size:12px;padding:2px 6px;margin-left:6px">${esc(sc.plate)}</span>`:''}
+        ${sc.urgent&&sc.urgentReason?`<div class="urgwhy">${esc(sc.urgentReason)}</div>`:''}
         <div class="pmeta"><span>Paleți programați: <b>${sc.plannedPallets??'—'}</b></span>${sc.transport?`<span>${esc(sc.transport)}</span>`:''}${sc.project?`<span>${esc(sc.project)}${sc.type?' · '+esc(sc.type):''}</span>`:''}${sc.contact?`<span>contact ${esc(sc.contact)}</span>`:''}${sc.obs?`<span style="color:var(--warn)">${esc(sc.obs)}</span>`:''}${late?'<span style="color:var(--warn)">întârziat</span>':''}</div></div>
-      <div class="pact"><span class="st ${st}">${SCHED_STATUS[st]}${st==='arrived'&&sc.arrivedAt?' '+fmtTime(sc.arrivedAt):''}</span>
+      <div class="pact">${S.canRank&&sc.urgent?`<span class="rk"><button type="button" data-sact="up" title="Mai sus în urgențe" ${idx===0?'disabled':''}>▲</button><button type="button" data-sact="down" title="Mai jos în urgențe" ${idx>=nU-1?'disabled':''}>▼</button></span>`:''}<span class="st ${st}">${SCHED_STATUS[st]}${st==='arrived'&&sc.arrivedAt?' '+fmtTime(sc.arrivedAt):''}</span>
         ${S.canRecv&&st==='planned'?`<button class="btn sm" data-sact="arrived">Sosit</button>`:''}
         ${S.canRecv?`<button class="btn sm ok" data-sact="start">▶ Pornește recepția</button>`:''}</div>
     </div>`}).join('');
@@ -931,9 +952,9 @@ function renderSchedule(){
   if(!rows.length){tb.innerHTML=`<tr><td colspan="11" class="muted" style="text-align:center;padding:30px">${showC?'Nicio programare anulată în această zi.':'Nicio programare'+(S.canPlan?' — apasă „＋ Programare nouă”':'')+'.'}</td></tr>`;return}
   tb.innerHTML=rows.map(sc=>{const st=schedStatus(sc),r=recOfSched(sc);
     const diff=r&&r.pallets!=null&&sc.plannedPallets!=null?r.pallets-sc.plannedPallets:null;
-    return `<tr class="row" data-sid="${sc.id}" style="${st==='cancelled'?'opacity:.5':''}">
+    return `<tr class="row ${sc.urgent?'urgentrow':''}" data-sid="${sc.id}" style="${st==='cancelled'?'opacity:.5':''}">
       <td class="mono" style="font-weight:600;color:var(--accent)">${slotLabel(sc.slot)}</td>
-      <td><b>${esc(sc.supplier||'—')}</b>${sc.location&&sc.location!=='HALA 10'?`<div class="muted" style="font-size:11px">${esc(sc.location)}</div>`:''}</td>
+      <td>${sc.urgent?urgentBadge(sc)+'<br>':''}<b>${esc(sc.supplier||'—')}</b>${sc.urgent&&sc.urgentReason?`<div class="urgwhy">${esc(sc.urgentReason)}</div>`:''}${sc.location&&sc.location!=='HALA 10'?`<div class="muted" style="font-size:11px">${esc(sc.location)}</div>`:''}</td>
       <td>${esc(sc.project||'')}${sc.type?`<div class="muted" style="font-size:12px">${esc(sc.type)}</div>`:''}</td>
       <td>${esc(sc.transport||'—')}</td>
       <td>${sc.plate?`<span class="plate" style="font-size:12px;padding:2px 6px">${esc(sc.plate)}</span>`:'—'}</td>
@@ -955,8 +976,8 @@ function openSchedModal(sc){
   openModal(`<div class="bh"><h2>${isNew?'Programare nouă':'Editează programarea'}</h2><span class="spacer"></span><button class="btn ghost sm" data-close>✕</button></div>
    <form id="schedForm"><div class="bb">
     <div class="fields">
-      <div class="f"><label>Zi operațională</label><input type="date" id="scDay" required value="${x.day}"></div>
-      <div class="f"><label>Slot orar</label><select id="scSlot">${slots.map(h=>`<option value="${h}" ${h===x.slot?'selected':''}>${slotLabel(h)}</option>`).join('')}</select></div>
+      <div class="f"><label>Zi operațională</label><input type="date" id="scDay" required value="${x.day}" ${S.isAdmin?'':`min="${opKey(Date.now())}"`}></div>
+      <div class="f"><label>Slot orar</label><select id="scSlot">${slots.map(h=>`<option value="${h}" ${h===x.slot?'selected':''} ${!S.isAdmin&&slotIsPast(x.day,h)&&h!==x.slot?'disabled':''}>${slotLabel(h)}${!S.isAdmin&&slotIsPast(x.day,h)?' (trecut)':''}</option>`).join('')}</select></div>
     </div>
     <div class="f"><label>Furnizor</label><select id="scSupSel"><option value="">Alege furnizorul…</option>${sups.map(s=>`<option ${s.name===x.supplier?'selected':''}>${esc(s.name)}</option>`).join('')}<option value="__other" ${x.supplier&&!sups.some(s=>s.name===x.supplier)?'selected':''}>✎ Alt furnizor (scrie numele)…</option></select></div>
     <div class="f" id="scSupOtherWrap" ${x.supplier&&!sups.some(s=>s.name===x.supplier)?'':'hidden'}><label>Nume furnizor</label><input id="scSup" value="${esc(x.supplier||'')}" placeholder="ex. nume furnizor nou"></div>
@@ -971,18 +992,35 @@ function openSchedModal(sc){
       <div class="f"><label>Incoterms</label><select id="scInc"><option value="">—</option>${INCOTERMS.map(v=>`<option ${v===x.incoterms?'selected':''}>${v}</option>`).join('')}</select></div>
     </div>
     <div class="f"><label>Observații</label><textarea id="scObs" rows="2">${esc(x.obs||'')}</textarea></div>
+    <div class="f" style="border:1px solid var(--line);border-radius:8px;padding:10px 12px;gap:8px">
+      <label class="inl" style="gap:8px;font-size:14px;text-transform:none;letter-spacing:0;color:var(--ink)"><input type="checkbox" id="scUrg" ${x.urgent?'checked':''} style="min-width:0;width:18px;height:18px"> <b style="color:var(--bad)">⚠ Camion urgent</b> <span class="muted" style="font-size:12px">— urcă în lista de descărcat, indiferent de slot</span></label>
+      <div id="scUrgWrap" ${x.urgent?'':'hidden'} style="display:grid;gap:8px">
+        <div class="f"><label>De ce este urgent? (obligatoriu)</label><textarea id="scUrgWhy" rows="2" placeholder="ex. linia de producție rămâne fără material la ora 12">${esc(x.urgentReason||'')}</textarea></div>
+        ${S.canRank?`<div class="f"><label>Ordinea în lista de urgențe (1 = prima)</label><input id="scUrgRank" type="number" min="1" inputmode="numeric" value="${x.urgentRank??''}" placeholder="la sfârșitul listei"><span class="muted" style="font-size:12px">Acum: ${urgentList().filter(u=>u.id!==x.id).length} urgențe active. Poți reordona și cu ▲▼ din lista „de descărcat”.</span></div>`:(x.urgentRank?`<span class="muted" style="font-size:12px">Poziția în urgențe: #${x.urgentRank} (o stabilește planificatorul admin)</span>`:`<span class="muted" style="font-size:12px">Ordinea între urgențe o stabilește planificatorul admin.</span>`)}
+      </div>
+    </div>
     ${!isNew?`<div class="f"><label>Status${S.isAdmin?' (administrator: orice status)':''}</label><select id="scSt">${Object.entries(SCHED_STATUS).filter(([k])=>S.isAdmin||!['receiving','done'].includes(k)||k===x.status).map(([k,v])=>`<option value="${k}" ${k===(x.status||'planned')?'selected':''}>${v}</option>`).join('')}</select></div>`:''}
     ${!isNew&&x.createdBy?`<p class="muted" style="margin:0;font-size:12px">Creată de ${esc(x.createdBy)} · ${fmtDate(x.createdAt)} ${fmtTime(x.createdAt)}${x.updatedBy?` · modificată de ${esc(x.updatedBy)} ${fmtDate(x.updatedAt)} ${fmtTime(x.updatedAt)}`:''}</p>`:''}
    </div>
    <div class="bf" style="flex-wrap:wrap">${!isNew&&x.status!=='cancelled'?`<button type="button" class="btn danger sm" id="scCancel">Anulează programarea</button>`:''}${!isNew&&x.status==='cancelled'?`<button type="button" class="btn sm" id="scRestore">↩ Reactivează</button>`:''}${!isNew&&S.isAdmin?`<button type="button" class="btn danger sm" id="scDelete" title="Dispare definitiv din baza de date">Șterge definitiv</button>`:''}<span class="spacer"></span><button type="button" class="btn" data-close>Renunță</button><button type="submit" class="btn primary">Salvează</button></div></form>`);
+  $('#scUrg').addEventListener('change',e=>{$('#scUrgWrap').hidden=!e.target.checked;if(e.target.checked)$('#scUrgWhy').focus()});
+  $('#scDay').addEventListener('change',()=>{const d=$('#scDay').value;$('#scSlot').querySelectorAll('option').forEach(o=>{const past=!S.isAdmin&&slotIsPast(d,+o.value);o.disabled=past&&+o.value!==x.slot;o.textContent=slotLabel(+o.value)+(past?' (trecut)':'')})});
   $('#scSupSel').addEventListener('change',e=>{const oth=e.target.value==='__other';$('#scSupOtherWrap').hidden=!oth;if(oth){$('#scSup').value='';$('#scSup').focus()}});
   const read=()=>({day:$('#scDay').value,slot:+$('#scSlot').value,supplier:($('#scSupSel').value==='__other'?$('#scSup').value:$('#scSupSel').value).trim(),plate:$('#scPlate').value.toUpperCase().trim(),
     plannedPallets:$('#scPal').value===''?null:+$('#scPal').value,transport:$('#scTr').value.trim(),project:$('#scPr').value.trim(),type:$('#scTy').value.trim(),
     location:$('#scLoc').value.trim()||'HALA 10',contact:$('#scCt').value.trim(),incoterms:$('#scInc').value,obs:$('#scObs').value.trim()});
   $('#schedForm').addEventListener('submit',e=>{
     e.preventDefault();const d=read();if(!d.day)return;if(!d.supplier){toast('Alege furnizorul din listă sau scrie-i numele');($('#scSupSel').value==='__other'?$('#scSup'):$('#scSupSel')).focus();return}
+    const moved=isNew||d.day!==x.day||d.slot!==x.slot;
+    if(!S.isAdmin&&moved&&slotIsPast(d.day,d.slot)){toast(d.day<opKey(Date.now())?'Nu se pot face programări pentru zile trecute':'Slotul '+slotLabel(d.slot)+' a trecut deja — alege un slot de la ora curentă încolo sau o zi următoare');$('#scSlot').focus();return}
+    const urg=$('#scUrg').checked;const why=($('#scUrgWhy').value||'').trim();
+    if(urg&&!why){toast('Scrie de ce este urgent camionul');$('#scUrgWhy').focus();return}
     const obj=isNew?{id:'s'+uid(),status:'planned',createdAt:Date.now(),createdBy:S.me?.name||S.me?.email||'?',...d}:{...x,...d,status:$('#scSt')?$('#scSt').value:x.status};
-    Store.saveSched(obj);S.schedDay=d.day;closeModal();toast(isNew?'Programare adăugată':'Programare salvată');
+    if(urg){if(!obj.urgent){obj.urgentAt=Date.now();obj.urgentBy=S.me?.name||'?'}obj.urgent=true;obj.urgentReason=why;
+      const rk=$('#scUrgRank');if(S.canRank&&rk&&rk.value!=='')obj.urgentRank=+rk.value;}
+    else{obj.urgent=false;obj.urgentReason='';if(S.canRank)obj.urgentRank=null;}
+    Store.saveSched(obj);
+    if(urg&&S.canRank){const rk=$('#scUrgRank');setUrgentRank(obj,rk&&rk.value!==''?+rk.value:(obj.urgentRank||9999))}S.schedDay=d.day;closeModal();toast(isNew?'Programare adăugată':'Programare salvată');
   });
   const c=$('#scCancel');if(c)c.addEventListener('click',()=>{if(confirm('Anulezi această programare? O vei regăsi la bifa „Anulate”.')){Store.saveSched({...x,status:'cancelled',cancelledAt:Date.now(),cancelledBy:S.me?.name||'?'});closeModal();toast('Programare anulată')}});
   const rs=$('#scRestore');if(rs)rs.addEventListener('click',()=>{const o={...x,status:recOfSched(x)?'receiving':'planned'};delete o.cancelledAt;delete o.cancelledBy;Store.saveSched(o);closeModal();toast('Programare reactivată')});
@@ -1026,6 +1064,7 @@ function schedAction(sc,a){
   if(a==='start')startFromSchedule(sc);
   if(a==='arrived'){sc.status='arrived';sc.arrivedAt=Date.now();Store.saveSched(sc);toast('Marcat ca sosit la '+fmtTime(sc.arrivedAt))}
   if(a==='edit'){if(!S.canPlan){toast('Doar planificatorii pot modifica programările');return}openSchedModal(sc)}
+  if(a==='up'||a==='down'){if(!S.canRank){toast('Doar planificatorul admin poate ordona urgențele');return}const l=urgentList();const i=l.findIndex(x=>x.id===sc.id);setUrgentRank(sc,(i<0?l.length:i)+(a==='up'?0:2))}
 }
 $('#plannedList').addEventListener('click',e=>{const a=e.target.closest('[data-sact]')?.dataset.sact;if(!a)return;schedAction(schedOf(e.target.closest('[data-sched]').dataset.sched),a)});
 $('#schedBody').addEventListener('click',e=>{const a=e.target.closest('[data-sact]')?.dataset.sact;const tr=e.target.closest('[data-sid]');if(!tr)return;
@@ -1262,12 +1301,12 @@ $('#histBody').addEventListener('change',e=>{
 $('#btnExport').addEventListener('click',async()=>{
   const rows=filteredHistory(S.receptions.filter(r=>r.status==='done'));
   if(!rows.length){toast('Nimic de exportat pentru filtrele alese');return}
-  const H=['Zi operațională','Schimb','Data calendaristică','Ora start','Ora sfârșit','Slot programat','Furnizor','Transportator','Proiect','Nr. auto','Operator','Nr. aviz / notă','Paleți programați','Paleți','Diferență paleți','Cutii','Durată totală (min)','Standard (min)','Diferență (min)',...STAGES.map(s=>s.n+' (min)'),'Probleme (pe etape)','Comentarii etape',...STAGE_TABS.map(s=>'Poze '+(s.k===GENERAL?'general':s.n)),'Poze total','Observații'];
+  const H=['Zi operațională','Schimb','Data calendaristică','Ora start','Ora sfârșit','Slot programat','Urgent','Furnizor','Transportator','Proiect','Nr. auto','Operator','Nr. aviz / notă','Paleți programați','Paleți','Diferență paleți','Cutii','Durată totală (min)','Standard (min)','Diferență (min)',...STAGES.map(s=>s.n+' (min)'),'Probleme (pe etape)','Comentarii etape',...STAGE_TABS.map(s=>'Poze '+(s.k===GENERAL?'general':s.n)),'Poze total','Observații'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
   const lines=[H.map(q).join(';')];
   for(const r of rows){const tot=Math.round(totalMs(r)/60000);
     const sc=r.scheduleId?schedOf(r.scheduleId):null;
-    lines.push([fmtOpDate(r.startedAt),'S'+shiftOf(r.startedAt),fmtDate(r.startedAt),fmtTime(r.startedAt),fmtTime(r.finishedAt),sc?slotLabel(sc.slot):'',r.supplier,r.transport||'',r.project||'',r.plate,r.operator,r.ref,r.plannedPallets,r.pallets,r.plannedPallets!=null&&r.pallets!=null?r.pallets-r.plannedPallets:'',r.boxes,tot,r.stdTotal,r.stdTotal!=null?tot-r.stdTotal:'',
+    lines.push([fmtOpDate(r.startedAt),'S'+shiftOf(r.startedAt),fmtDate(r.startedAt),fmtTime(r.startedAt),fmtTime(r.finishedAt),sc?slotLabel(sc.slot):'',sc&&sc.urgent?'DA'+(sc.urgentRank?' #'+sc.urgentRank:'')+(sc.urgentReason?' – '+sc.urgentReason:''):'',r.supplier,r.transport||'',r.project||'',r.plate,r.operator,r.ref,r.plannedPallets,r.pallets,r.plannedPallets!=null&&r.pallets!=null?r.pallets-r.plannedPallets:'',r.boxes,tot,r.stdTotal,r.stdTotal!=null?tot-r.stdTotal:'',
       ...STAGES.map(s=>Math.round(stageMs(r,s.k)/60000)),problemsSummary(r),notesSummary(r),...photoCounts(r),photoTotal(r),r.note].map(q).join(';'))}
   const csv='\uFEFF'+lines.join('\r\n');
   const name='receptii_'+opKey(Date.now())+'.csv';
