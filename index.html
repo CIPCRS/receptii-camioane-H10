@@ -419,7 +419,7 @@ input,select,textarea{font-size:16px}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '2.1.0';
+const APP_VERSION = '2.1.1';
 const ROLES={admin:'Administrator',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
 const CFG = window.RECEPTII_CONFIG || {};
@@ -927,7 +927,8 @@ function openSchedModal(sc){
       <div class="f"><label>Zi operațională</label><input type="date" id="scDay" required value="${x.day}"></div>
       <div class="f"><label>Slot orar</label><select id="scSlot">${slots.map(h=>`<option value="${h}" ${h===x.slot?'selected':''}>${slotLabel(h)}</option>`).join('')}</select></div>
     </div>
-    <div class="f"><label>Furnizor</label><input id="scSup" list="dlSup" required value="${esc(x.supplier||'')}" placeholder="alege sau scrie">${dl('dlSup',sups.map(s=>s.name))}</div>
+    <div class="f"><label>Furnizor</label><select id="scSupSel"><option value="">Alege furnizorul…</option>${sups.map(s=>`<option ${s.name===x.supplier?'selected':''}>${esc(s.name)}</option>`).join('')}<option value="__other" ${x.supplier&&!sups.some(s=>s.name===x.supplier)?'selected':''}>✎ Alt furnizor (scrie numele)…</option></select></div>
+    <div class="f" id="scSupOtherWrap" ${x.supplier&&!sups.some(s=>s.name===x.supplier)?'':'hidden'}><label>Nume furnizor</label><input id="scSup" value="${esc(x.supplier||'')}" placeholder="ex. nume furnizor nou"></div>
     <div class="fields">
       <div class="f"><label>Nr. auto</label><input id="scPlate" class="plateIn" value="${esc(x.plate||'')}" placeholder="B 123 ABC / remorcă" autocapitalize="characters"></div>
       <div class="f"><label>Paleți programați</label><input id="scPal" type="number" min="0" inputmode="numeric" value="${x.plannedPallets??''}"></div>
@@ -943,11 +944,12 @@ function openSchedModal(sc){
     ${!isNew&&x.createdBy?`<p class="muted" style="margin:0;font-size:12px">Creată de ${esc(x.createdBy)} · ${fmtDate(x.createdAt)} ${fmtTime(x.createdAt)}${x.updatedBy?` · modificată de ${esc(x.updatedBy)} ${fmtDate(x.updatedAt)} ${fmtTime(x.updatedAt)}`:''}</p>`:''}
    </div>
    <div class="bf">${!isNew?`<button type="button" class="btn danger sm" id="scCancel">Anulează programarea</button>`:''}<span class="spacer"></span><button type="button" class="btn" data-close>Renunță</button><button type="submit" class="btn primary">Salvează</button></div></form>`);
-  const read=()=>({day:$('#scDay').value,slot:+$('#scSlot').value,supplier:$('#scSup').value.trim(),plate:$('#scPlate').value.toUpperCase().trim(),
+  $('#scSupSel').addEventListener('change',e=>{const oth=e.target.value==='__other';$('#scSupOtherWrap').hidden=!oth;if(oth){$('#scSup').value='';$('#scSup').focus()}});
+  const read=()=>({day:$('#scDay').value,slot:+$('#scSlot').value,supplier:($('#scSupSel').value==='__other'?$('#scSup').value:$('#scSupSel').value).trim(),plate:$('#scPlate').value.toUpperCase().trim(),
     plannedPallets:$('#scPal').value===''?null:+$('#scPal').value,transport:$('#scTr').value.trim(),project:$('#scPr').value.trim(),type:$('#scTy').value.trim(),
     location:$('#scLoc').value.trim()||'HALA 10',contact:$('#scCt').value.trim(),incoterms:$('#scInc').value,obs:$('#scObs').value.trim()});
   $('#schedForm').addEventListener('submit',e=>{
-    e.preventDefault();const d=read();if(!d.day||!d.supplier)return;
+    e.preventDefault();const d=read();if(!d.day)return;if(!d.supplier){toast('Alege furnizorul din listă sau scrie-i numele');($('#scSupSel').value==='__other'?$('#scSup'):$('#scSupSel')).focus();return}
     const obj=isNew?{id:'s'+uid(),status:'planned',createdAt:Date.now(),createdBy:S.me?.name||S.me?.email||'?',...d}:{...x,...d,status:$('#scSt')?$('#scSt').value:x.status};
     Store.saveSched(obj);S.schedDay=d.day;closeModal();toast(isNew?'Programare adăugată':'Programare salvată');
   });
