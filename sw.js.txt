@@ -1,0 +1,31 @@
+/* Service worker: permite deschiderea aplicației și fără semnal (Firestore are propriul cache de date). */
+const CACHE = 'receptii-v2';
+const SHELL = ['./', './index.html', './config.js', './manifest.json', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png'];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => Promise.allSettled(SHELL.map(u => c.add(u)))).then(() => self.skipWaiting()));
+});
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+});
+self.addEventListener('fetch', e => {
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET') return;
+  // Firestore / Auth traffic: never intercept.
+  if (url.hostname.endsWith('googleapis.com') || url.hostname.endsWith('firebaseio.com')) return;
+  // SDK scripts and fonts: cache-first (they are versioned).
+  if (url.hostname === 'www.gstatic.com' || url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+    e.respondWith(caches.open(CACHE).then(async c => {
+      const hit = await c.match(e.request); if (hit) return hit;
+      const res = await fetch(e.request); if (res.ok) c.put(e.request, res.clone()); return res;
+    }));
+    return;
+  }
+  // Own files: network-first, fallback to cache (so updates arrive, but offline still opens).
+  if (url.origin === self.location.origin) {
+    e.respondWith(fetch(e.request).then(res => {
+      if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
+      return res;
+    }).catch(() => caches.match(e.request).then(r => r || caches.match('./index.html'))));
+  }
+});
