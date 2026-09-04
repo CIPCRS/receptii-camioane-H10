@@ -257,6 +257,31 @@ input,select,textarea{font-size:16px}
 .ro .stage,.ro .chip{cursor:default;pointer-events:none}
 .ro .stage:hover{border-color:var(--line);background:inherit}
 .rosel{border:1px solid var(--line2);border-radius:6px;padding:4px 6px;background:var(--surface);font-size:12px}
+/* panou etapă */
+.spanel{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.stabs{display:flex;overflow-x:auto;background:var(--surface2);border-bottom:1px solid var(--line)}
+.stab{flex:1 0 auto;border:0;background:none;padding:8px 10px;font-size:12px;font-weight:600;color:var(--ink2);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+.stab.on{color:var(--accent);border-bottom-color:var(--accent);background:var(--surface)}
+.stab.live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1.4s infinite}
+.cb{display:inline-block;min-width:16px;padding:0 4px;border-radius:8px;font-size:10px;font-style:normal;text-align:center;line-height:16px;font-family:var(--mono)}
+.cb.p{background:var(--warn-soft);color:var(--warn)} .cb.c{background:var(--accent-soft);color:var(--accent)} .cb.f{background:var(--ok-soft);color:var(--ok)}
+.sbody{padding:12px 14px;display:grid;gap:12px;background:var(--surface)}
+.cmts{display:grid;gap:6px}
+.cmt{background:var(--surface2);border-radius:6px;padding:6px 10px}
+.cmt .ct{font-size:13.5px;white-space:pre-wrap}
+.cmt .cm{font-size:11px;color:var(--muted);margin-top:2px}
+.cdel{border:0;background:none;color:var(--muted);cursor:pointer;padding:0 4px}
+.cdel:hover{color:var(--bad)}
+.pgrid{display:flex;flex-wrap:wrap;gap:8px}
+.pth{width:84px;height:84px;border:1px solid var(--line);border-radius:6px;overflow:hidden;padding:0;background:var(--surface2);cursor:pointer}
+.pth img{width:100%;height:100%;object-fit:cover;display:block}
+.padd{width:84px;height:84px;border:1.5px dashed var(--line2);border-radius:6px;background:var(--surface);cursor:pointer;display:grid;place-items:center;gap:2px;font-size:22px;color:var(--ink2)}
+.padd span{font-size:10.5px}
+.padd:hover{border-color:var(--accent);color:var(--accent)}
+.pstab{display:grid;grid-template-columns:1fr repeat(6,auto);gap:4px 10px;align-items:center;font-size:13px}
+.pstab .h{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);text-align:center}
+.pstab input{min-width:0}
+@media (max-width:640px){.pstab{font-size:12px;gap:4px 6px}}
 /* programări */
 .plan{display:grid;gap:8px;margin-bottom:18px}
 .plan h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;font-family:var(--sans);display:flex;align-items:center;gap:8px}
@@ -328,6 +353,7 @@ input,select,textarea{font-size:16px}
         <div class="spacer"></div>
         <label class="inl" style="gap:6px;font-size:13px;white-space:nowrap;padding-bottom:9px"><input type="checkbox" id="fDel" style="min-width:0">Recepții șterse <span class="n" id="nDel" style="display:inline-block;min-width:20px;padding:0 6px;border-radius:10px;background:var(--surface2);font-family:var(--mono);font-size:11px;text-align:center"></span></label>
         <button class="btn" id="btnExport">⤓ Export CSV (Excel)</button>
+        <button class="btn" id="btnExportHtml" title="Raport cu pozele incluse, se deschide în orice browser">⤓ Raport cu poze (HTML)</button>
       </div>
       <div class="tablewrap">
         <table>
@@ -396,6 +422,7 @@ input,select,textarea{font-size:16px}
         <h2>Catalog probleme</h2>
         <p>Problemele care pot fi bifate la o recepție (descărcare, verificare, etichetare, alocare la raft). Se pot adăuga oricând; la fiecare recepție există și un câmp de observații libere.</p>
         <div class="chips" id="prList" style="margin-bottom:10px"></div>
+        <details class="admin-only" style="margin-bottom:10px"><summary style="cursor:pointer;font-size:13px;color:var(--accent)">Probleme pe etape — la ce etapă apare fiecare problemă</summary><p style="font-size:12px">Nebifat pe niciun rând = problema apare la toate etapele (așa sunt acum toate). Bifează doar etapele unde are sens; se salvează automat.</p><div class="pstab" id="pstab"></div></details>
         <div class="inl recv-only"><input id="prNew" placeholder="Problemă nouă"><button class="btn" id="prAdd">Adaugă</button></div>
       </div>
       <div class="sec">
@@ -419,7 +446,7 @@ input,select,textarea{font-size:16px}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '2.1.1';
+const APP_VERSION = '2.2.0';
 const ROLES={admin:'Administrator',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
 const CFG = window.RECEPTII_CONFIG || {};
@@ -482,7 +509,7 @@ const shiftDay = (k,n)=>dayKey(dayKeyToTs(k)+n*86400000);
 const fmtDayKey = k=>{const [y,m,d]=k.split('-');const dn=['Duminică','Luni','Marți','Miercuri','Joi','Vineri','Sâmbătă'][new Date(+y,+m-1,+d).getDay()];return dn+' '+d+'.'+m+'.'+y};
 
 /* ---------- stare ---------- */
-const S = { receptions:[], suppliers:[], problems:[], operators:[], dayStart:7, shiftHours:8, schedules:[], schedExtra:[], schedDay:null, planners:[], isPlanner:false, role:'viewer', canRecv:false, canPlan:false, rolesMissing:false, admins:[], me:null, isAdmin:false, tab:'active', openRow:null, ready:false };
+const S = { receptions:[], suppliers:[], problems:[], problemStageMap:{}, photos:{}, photoSubs:{}, photoCounts:{}, uiStage:{}, uploading:{}, operators:[], dayStart:7, shiftHours:8, schedules:[], schedExtra:[], schedDay:null, planners:[], isPlanner:false, role:'viewer', canRecv:false, canPlan:false, rolesMissing:false, admins:[], me:null, isAdmin:false, tab:'active', openRow:null, ready:false };
 let fb=null, auth=null, fs=null, pendingRender=false, unsubs=[];
 
 /* ---------- utilitare ---------- */
@@ -625,7 +652,7 @@ function applyRoles(){
   if(S.isAdmin&&S.rolesMissing){S.rolesMissing=false;Store.saveOperators()}
 }
 function onLogout(){
-  unsubs.forEach(u=>u());unsubs=[];S.receptions=[];S.ready=false;chosenOp=null;pin='';
+  unsubs.forEach(u=>u());unsubs=[];Object.values(S.photoSubs).forEach(u=>u());S.photoSubs={};S.photos={};S.receptions=[];S.ready=false;chosenOp=null;pin='';
   $('#app').hidden=true;$('#login').hidden=false;
   loadPublicOperators().then(renderLogin);
 }
@@ -639,8 +666,8 @@ function subscribe(){
     scheduleRender();
   }));
   unsubs.push(fs.doc('config/settings').onSnapshot(snap=>{
-    if(snap.exists){const d=snap.data();S.problems=d.problems||[];S.dayStart=typeof d.dayStart==='number'?d.dayStart:7;S.shiftHours=typeof d.shiftHours==='number'?d.shiftHours:8}
-    else{S.problems=DEFAULT_PROBLEMS.slice();fs.doc('config/settings').set({problems:S.problems,dayStart:S.dayStart,shiftHours:S.shiftHours}).catch(()=>{})}
+    if(snap.exists){const d=snap.data();S.problems=d.problems||[];S.problemStageMap=d.problemStageMap||{};S.dayStart=typeof d.dayStart==='number'?d.dayStart:7;S.shiftHours=typeof d.shiftHours==='number'?d.shiftHours:8}
+    else{S.problems=DEFAULT_PROBLEMS.slice();fs.doc('config/settings').set({problems:S.problems,problemStageMap:S.problemStageMap,dayStart:S.dayStart,shiftHours:S.shiftHours}).catch(()=>{})}
     scheduleRender();
   }));
   const fromDay=shiftDay(opKey(Date.now()),-3);
@@ -679,7 +706,7 @@ const Store = {
     fs.doc('receptions/'+id).delete().catch(e=>{toast(e.code==='permission-denied'?'Nu ai drept de ștergere definitivă (doar administratorii)':'Eroare la ștergere');});
   },
   async saveSuppliers(){scheduleRender();fs.doc('config/suppliers').set({list:S.suppliers}).catch(()=>toast('Eroare la salvare furnizori'))},
-  async saveSettings(){scheduleRender();fs.doc('config/settings').set({problems:S.problems,dayStart:S.dayStart,shiftHours:S.shiftHours}).catch(()=>toast('Eroare la salvare setări'))},
+  async saveSettings(){scheduleRender();fs.doc('config/settings').set({problems:S.problems,problemStageMap:S.problemStageMap,dayStart:S.dayStart,shiftHours:S.shiftHours}).catch(()=>toast('Eroare la salvare setări'))},
   async saveOperators(){
     S.operators.forEach(o=>{o.role=roleOf(o);o.admin=o.role==='admin';o.planner=o.role==='planner'});
     S.admins=S.operators.filter(o=>o.role==='admin'&&o.active!==false).map(o=>o.email);
@@ -732,6 +759,7 @@ function renderStats(act,done){
 
 function renderActive(act){
   const el=$('#activeList');
+  if(fs)ensurePhotoSubs(act.map(r=>r.id).concat(S.openRow?[S.openRow]:[]));
   if(!S.ready){el.innerHTML='<div class="loading">Se încarcă…</div>';return}
   if(!act.length){el.innerHTML=`<div class="empty"><b>Niciun camion în lucru</b>${S.canRecv?'Pornește recepția din lista de camioane programate sau apasă „＋ Recepție neplanificată” — cronometrul pornește automat.':'Când depozitul pornește o recepție, apare aici în timp real.'}</div>`;return}
   const now=Date.now();
@@ -757,9 +785,8 @@ function renderActive(act){
           <div class="f"><label>Operator</label><select ${S.canRecv?'':'disabled'} data-field="operator"><option value="">—</option>${opNames().concat(r.operator&&!opNames().includes(r.operator)?[r.operator]:[]).map(o=>`<option ${o===r.operator?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
           <div class="f"><label>Nr. aviz / notă scurtă</label><input ${S.canRecv?'':'disabled'} data-field="ref" value="${esc(r.ref||'')}" placeholder="opțional"></div>
         </div>
-        <div class="f"><label>Probleme apărute</label>
-          <div class="chips">${S.problems.map(p=>`<button class="chip ${(r.problems||[]).includes(p)?'on':''}" data-prob="${esc(p)}">${esc(p)}</button>`).join('')}</div></div>
-        <div class="f"><label>Observații</label><textarea ${S.canRecv?'':'disabled'} data-field="note" rows="1" placeholder="detalii: ce s-a întâmplat, câți paleți afectați…">${esc(r.note||'')}</textarea></div>
+        ${renderStagePanel(r,'card')}
+        <div class="f"><label>Observații generale</label><textarea ${S.canRecv?'':'disabled'} data-field="note" rows="1" placeholder="detalii: ce s-a întâmplat, câți paleți afectați…">${esc(r.note||'')}</textarea></div>
       </div>
       ${S.canRecv?`<div class="foot">
         <button class="btn ok" data-act="finish">✔ Terminare recepție</button>
@@ -813,7 +840,7 @@ function renderHistory(done){
       <td class="num">${r.pallets??'—'}${r.plannedPallets!=null?`<div class="muted" style="font-size:11px">prog. ${r.plannedPallets}${r.pallets!=null&&r.pallets!==r.plannedPallets?` <span style="color:var(--bad)">(${r.pallets-r.plannedPallets>0?'+':''}${r.pallets-r.plannedPallets})</span>`:''}</div>`:''}</td><td class="num">${r.boxes??'—'}</td>
       <td class="num">${fmtMin(tot)}</td><td class="num muted">${std!=null?std+' min':'—'}</td>
       <td>${diff==null?'<span class="pill na">n/a</span>':`<span class="pill ${cls}">${diff>0?'+':''}${diff} min</span>`}</td>
-      <td><div class="probs">${(r.problems||[]).map(p=>`<span>${esc(p)}</span>`).join('')}${r.note?`<span class="muted" style="background:none;padding:0">${esc(r.note)}</span>`:''}</div></td>
+      <td><div class="probs">${(r.problems||[]).map(p=>`<span>${esc(p)}</span>`).join('')}${STAGES.flatMap(s=>((r.stageProblems||{})[s.k]||[]).map(p=>`<span title="${esc(s.n)}">${esc(s.n.split(' ')[0])}: ${esc(p)}</span>`)).join('')}${photoTotal(r)?`<span style="background:var(--ok-soft)">📷 ${photoTotal(r)}</span>`:''}${r.note?`<span class="muted" style="background:none;padding:0">${esc(r.note)}</span>`:''}</div></td>
     </tr>${open?renderDetail(r):''}`}).join('');
 }
 
@@ -832,8 +859,8 @@ function renderDetail(r){
           <div class="f"><label>Nr. auto</label><input ${S.canRecv?'':'disabled'} class="plateIn" data-efield="plate" value="${esc(r.plate||'')}"></div>
           <div class="f"><label>Operator</label><select ${S.canRecv?'':'disabled'} data-efield="operator"><option value="">—</option>${opNames().concat(r.operator&&!opNames().includes(r.operator)?[r.operator]:[]).map(o=>`<option ${o===r.operator?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
         </div>
-        <div class="f"><label>Probleme</label><div class="chips">${S.problems.map(p=>`<button class="chip ${(r.problems||[]).includes(p)?'on':''}" data-eprob="${esc(p)}">${esc(p)}</button>`).join('')}</div></div>
-        <div class="f"><label>Observații</label><textarea ${S.canRecv?'':'disabled'} data-efield="note" rows="2">${esc(r.note||'')}</textarea></div>
+        ${renderStagePanel(r,'hist')}
+        <div class="f"><label>Observații generale</label><textarea ${S.canRecv?'':'disabled'} data-efield="note" rows="2">${esc(r.note||'')}</textarea></div>
         <div class="muted" style="font-size:12px">Creată de ${esc(r.createdBy?nameOf(r.createdBy):'—')} · terminată de ${esc(r.finishedBy?nameOf(r.finishedBy):'—')}${r.deletedBy?` · <b>ștearsă de ${esc(r.deletedBy)}</b> la ${fmtDate(r.deletedAt)} ${fmtTime(r.deletedAt)}`:''}${r.restoredBy?` · restaurată de ${esc(r.restoredBy)} la ${fmtDate(r.restoredAt)} ${fmtTime(r.restoredAt)}`:''}</div>
         ${r.status==='deleted'
           ?`<div class="inl">${S.isAdmin?`<button class="btn sm" data-eact="restore">↩ Restaurează recepția</button><span class="spacer"></span><button class="btn sm danger" data-eact="purge">Șterge definitiv</button>`:`<span class="muted" style="font-size:12px">Restaurarea și ștergerea definitivă: doar administratorul.</span>`}</div>`
@@ -852,6 +879,7 @@ function renderSuppliers(){
 }
 function renderSettings(){
   $('#opList').innerHTML=S.operators.map(o=>{const r=roleOf(o);return `<span class="tag" style="${o.active===false?'opacity:.5':''}">${esc(o.name)}${S.isAdmin?` <select class="rosel" data-oprole="${esc(o.email)}">${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${k===r?'selected':''}>${v}</option>`).join('')}</select>`:` <span class="muted" style="font-size:11px">(${ROLES[r]})</span>`}${o.active===false?' <span class="muted" style="font-size:11px">(dezactivat)</span>':''}${S.isAdmin&&o.email!==S.me.email?`<button data-optoggle="${esc(o.email)}" title="${o.active===false?'Reactivează':'Dezactivează'}">${o.active===false?'↻':'×'}</button>`:''}</span>`}).join('')||'<span class="muted">Niciun operator încă.</span>';
+  renderProblemStages();
   $('#prList').innerHTML=S.problems.map(p=>`<span class="tag">${esc(p)}${S.isAdmin?`<button data-prdel="${esc(p)}" title="Șterge">×</button>`:''}</span>`).join('');
   const ds=$('#dayStart');if(ds&&document.activeElement!==ds){ds.innerHTML=Array.from({length:24},(_,h)=>`<option value="${h}" ${h===S.dayStart?'selected':''}>${pad(h)}:00</option>`).join('')}
   const sh=$('#shiftHours');if(sh&&document.activeElement!==sh)sh.value=String(S.shiftHours);
@@ -1005,6 +1033,136 @@ $('#sdNext').addEventListener('click',()=>setSchedDay(shiftDay(S.schedDay,1)));
 $('#sdToday').addEventListener('click',()=>setSchedDay(opKey(Date.now())));
 $('#sdDate').addEventListener('change',e=>{if(e.target.value)setSchedDay(e.target.value)});
 
+/* ---------- detalii pe etapă: probleme, comentarii, poze ---------- */
+const GENERAL='general';
+const STAGE_TABS=STAGES.concat([{k:GENERAL,n:'General'}]);
+function problemsForStage(k){const m=S.problemStageMap||{};return S.problems.filter(p=>{const a=m[p];return !a||!a.length||k===GENERAL||a.includes(k)})}
+function stageProblems(rec,k){return k===GENERAL?(rec.problems||[]):((rec.stageProblems||{})[k]||[])}
+function stageNotes(rec,k){return ((rec.stageNotes||{})[k]||[])}
+function photosOf(recId,k){return (S.photos[recId]||[]).filter(p=>!k||p.stage===k).sort((a,b)=>a.at-b.at)}
+function uiStageOf(rec){return S.uiStage[rec.id]||activeStage(rec)||(rec.segments&&rec.segments.length?rec.segments[rec.segments.length-1].s:'unload')}
+function countsFor(rec,k){return {p:stageProblems(rec,k).length,c:stageNotes(rec,k).length,f:photosOf(rec.id,k).length}}
+
+function renderStagePanel(rec,mode){ // mode: 'card' | 'hist'
+  const cur=uiStageOf(rec),can=S.canRecv&&rec.status!=='deleted';
+  const pref=mode==='card'?'':'e';
+  const tabs=STAGE_TABS.map(s=>{const c=countsFor(rec,s.k);const badge=(c.p?`<i class="cb p">${c.p}</i>`:'')+(c.c?`<i class="cb c">${c.c}</i>`:'')+(c.f?`<i class="cb f">${c.f}</i>`:'');
+    return `<button type="button" class="stab ${s.k===cur?'on':''} ${activeStage(rec)===s.k?'live':''}" data-stab="${s.k}">${esc(s.k===GENERAL?'General':s.n)}${badge}</button>`}).join('');
+  const probs=cur===GENERAL&&!(rec.problems||[]).length&&mode==='card'?'':`<div class="f"><label>Probleme la ${esc(cur===GENERAL?'recepție (general)':STAGE_BY[cur].n.toLowerCase())}</label>
+    <div class="chips">${problemsForStage(cur).map(p=>`<button type="button" class="chip ${stageProblems(rec,cur).includes(p)?'on':''}" data-sprob="${esc(p)}" ${can?'':'disabled'}>${esc(p)}</button>`).join('')||'<span class="muted" style="font-size:12px">Nicio problemă definită pentru această etapă (Setări → Catalog probleme).</span>'}</div></div>`;
+  const notes=stageNotes(rec,cur);
+  const cmts=`<div class="f"><label>Comentarii</label>
+    <div class="cmts">${notes.map((n,i)=>`<div class="cmt"><div class="ct">${esc(n.t)}</div><div class="cm">${esc(n.by)} · ${fmtDate(n.at)} ${fmtTime(n.at)}${can&&n.byEmail===S.me.email?` <button type="button" class="cdel" data-delcmt="${i}" title="Șterge comentariul">✕</button>`:''}</div></div>`).join('')||'<span class="muted" style="font-size:12px">Niciun comentariu.</span>'}</div>
+    ${can?`<div class="inl" style="margin-top:6px"><input data-cmt placeholder="Scrie un comentariu pentru această etapă…" style="flex:1;min-width:160px"><button type="button" class="btn sm" data-addcmt>Adaugă</button></div>`:''}</div>`;
+  const ph=photosOf(rec.id,cur);
+  const photos=`<div class="f"><label>Poze ${ph.length?`(${ph.length})`:''}</label>
+    <div class="pgrid">${ph.map(p=>`<button type="button" class="pth" data-photo="${p.id}" title="${esc(p.by)} · ${fmtTime(p.at)}"><img src="${p.thumb||p.data}" alt=""></button>`).join('')}
+    ${can?`<button type="button" class="padd" data-addphoto title="Adaugă poză">📷<span>Adaugă poză</span></button><input type="file" accept="image/*" capture="environment" multiple hidden data-photo-input>`:''}
+    ${!ph.length&&!can?'<span class="muted" style="font-size:12px">Nicio poză.</span>':''}</div>
+    ${S.uploading[rec.id]?`<div class="muted" style="font-size:12px;margin-top:4px">Se încarcă ${S.uploading[rec.id]} poză/poze…</div>`:''}</div>`;
+  return `<div class="spanel" data-spanel="${rec.id}"><div class="stabs">${tabs}</div><div class="sbody">${probs}${cmts}${photos}</div></div>`;
+}
+
+/* abonamente poze per recepție */
+function ensurePhotoSubs(ids){
+  const want=new Set(ids);
+  Object.keys(S.photoSubs).forEach(id=>{if(!want.has(id)){S.photoSubs[id]();delete S.photoSubs[id];delete S.photos[id]}});
+  ids.forEach(id=>{if(S.photoSubs[id])return;
+    S.photoSubs[id]=()=>{};
+    const un=fs.collection('photos').where('receptionId','==',id).onSnapshot(snap=>{S.photos[id]=snap.docs.map(d=>d.data());scheduleRender()},e=>console.warn('photos',e));
+    S.photoSubs[id]=un;
+  });
+}
+
+/* comprimare poză pe telefon -> JPEG mic (base64) */
+function loadImage(file){return new Promise((res,rej)=>{const u=URL.createObjectURL(file);const im=new Image();im.onload=()=>{URL.revokeObjectURL(u);res(im)};im.onerror=rej;im.src=u})}
+function drawScaled(im,max,q){const r=Math.min(1,max/Math.max(im.naturalWidth,im.naturalHeight));const c=document.createElement('canvas');c.width=Math.round(im.naturalWidth*r);c.height=Math.round(im.naturalHeight*r);c.getContext('2d').drawImage(im,0,0,c.width,c.height);return c.toDataURL('image/jpeg',q)}
+async function compressPhoto(file){
+  const im=await loadImage(file);
+  let d=drawScaled(im,1280,.72);
+  if(d.length>700000)d=drawScaled(im,1024,.62);
+  if(d.length>700000)d=drawScaled(im,800,.55);
+  if(d.length>900000)throw new Error('Poza e prea mare chiar și după comprimare');
+  return {data:d,thumb:drawScaled(im,240,.6)};
+}
+async function addPhotos(rec,stage,files){
+  if(!S.canRecv)return;
+  S.uploading[rec.id]=(S.uploading[rec.id]||0)+files.length;scheduleRender();
+  for(const f of files){
+    try{const {data,thumb}=await compressPhoto(f);
+      const id='p'+uid();
+      await fs.doc('photos/'+id).set({id,receptionId:rec.id,stage,data,thumb,by:S.me.name,byEmail:S.me.email,at:Date.now(),bytes:data.length});
+      rec.photoCounts=rec.photoCounts||{};rec.photoCounts[stage]=(rec.photoCounts[stage]||0)+1;Store.saveRec(rec);
+    }catch(e){console.error(e);toast('Poza nu a putut fi salvată: '+(e.code||e.message))}
+    S.uploading[rec.id]=Math.max(0,(S.uploading[rec.id]||1)-1);
+  }
+  if(!S.uploading[rec.id])delete S.uploading[rec.id];
+  scheduleRender();toast(files.length>1?'Poze adăugate':'Poză adăugată');
+}
+function openLightbox(pid){
+  const p=Object.values(S.photos).flat().find(x=>x.id===pid);if(!p)return;
+  const rec=S.receptions.find(r=>r.id===p.receptionId);
+  const mine=S.me&&p.byEmail===S.me.email&&S.canRecv;
+  openModal(`<div class="bh"><h2 style="font-size:15px">${esc(rec?rec.supplier:'')} · ${esc(p.stage===GENERAL?'General':(STAGE_BY[p.stage]||{}).n||p.stage)}</h2><span class="spacer"></span><button class="btn ghost sm" data-close>✕</button></div>
+    <div style="background:#000;display:grid;place-items:center"><img src="${p.data}" style="max-width:100%;max-height:70vh;display:block"></div>
+    <div class="bf" style="justify-content:space-between"><span class="muted" style="font-size:12.5px">${esc(p.by)} · ${fmtDate(p.at)} ${fmtTime(p.at)} · ${Math.round(p.bytes/1024)} KB</span>
+      <span class="inl"><a class="btn sm" href="${p.data}" download="poza_${esc(rec?rec.plate||rec.supplier:'')}_${p.stage}_${fmtTime(p.at).replace(':','')}.jpg">⤓ Salvează</a>${mine?`<button class="btn sm danger" id="lbDel">Șterge poza</button>`:''}</span></div>`);
+  const d=$('#lbDel');if(d)d.addEventListener('click',()=>{if(confirm('Ștergi această poză?'))fs.doc('photos/'+p.id).delete().then(()=>{if(rec){rec.photoCounts=rec.photoCounts||{};rec.photoCounts[p.stage]=Math.max(0,(rec.photoCounts[p.stage]||1)-1);Store.saveRec(rec)}closeModal();toast('Poză ștearsă')}).catch(()=>toast('Nu ai drept să ștergi această poză'))});
+}
+
+/* evenimente comune panoului (card activ + istoric) */
+function panelHandler(container,getRec){
+  container.addEventListener('click',e=>{
+    const panel=e.target.closest('[data-spanel]');if(!panel)return;
+    const rec=getRec(panel.dataset.spanel);if(!rec)return;
+    const tb=e.target.closest('[data-stab]');if(tb){S.uiStage[rec.id]=tb.dataset.stab;render();return}
+    const ph=e.target.closest('[data-photo]');if(ph){openLightbox(ph.dataset.photo);return}
+    if(!S.canRecv||rec.status==='deleted'){if(e.target.closest('[data-sprob],[data-addcmt],[data-delcmt],[data-addphoto]'))toast('Rolul tău este doar de vizualizare');return}
+    const cur=uiStageOf(rec);
+    const sp=e.target.closest('[data-sprob]');
+    if(sp){const p=sp.dataset.sprob;
+      if(cur===GENERAL){rec.problems=(rec.problems||[]).includes(p)?rec.problems.filter(x=>x!==p):(rec.problems||[]).concat([p])}
+      else{rec.stageProblems=rec.stageProblems||{};const a=rec.stageProblems[cur]||[];rec.stageProblems[cur]=a.includes(p)?a.filter(x=>x!==p):a.concat([p])}
+      Store.saveRec(rec);return}
+    if(e.target.closest('[data-addcmt]')){const inp=panel.querySelector('[data-cmt]');const t=(inp.value||'').trim();if(!t)return;
+      rec.stageNotes=rec.stageNotes||{};(rec.stageNotes[cur]=rec.stageNotes[cur]||[]).push({t,by:S.me.name,byEmail:S.me.email,at:Date.now()});inp.value='';Store.saveRec(rec);return}
+    const dc=e.target.closest('[data-delcmt]');
+    if(dc){const i=+dc.dataset.delcmt;const n=(rec.stageNotes?.[cur]||[])[i];if(n&&n.byEmail===S.me.email&&confirm('Ștergi comentariul?')){rec.stageNotes[cur].splice(i,1);Store.saveRec(rec)}return}
+    if(e.target.closest('[data-addphoto]')){panel.querySelector('[data-photo-input]').click();return}
+  });
+  container.addEventListener('change',e=>{
+    if(!e.target.matches('[data-photo-input]'))return;
+    const panel=e.target.closest('[data-spanel]');const rec=getRec(panel.dataset.spanel);if(!rec)return;
+    const files=Array.from(e.target.files||[]).filter(f=>f.type.startsWith('image/'));e.target.value='';
+    if(files.length)addPhotos(rec,uiStageOf(rec),files);
+  });
+  container.addEventListener('keydown',e=>{if(e.target.matches('[data-cmt]')&&e.key==='Enter'){e.preventDefault();e.target.closest('[data-spanel]').querySelector('[data-addcmt]').click()}});
+}
+panelHandler($('#activeList'),id=>S.receptions.find(r=>r.id===id));
+panelHandler($('#histBody'),id=>S.receptions.find(r=>r.id===id));
+
+/* text rezumat probleme/comentarii pe etape (istoric, CSV) */
+function problemsSummary(r){const parts=[];if((r.problems||[]).length)parts.push((r.problems||[]).join(', '));STAGES.forEach(s=>{const a=(r.stageProblems||{})[s.k]||[];if(a.length)parts.push(s.n+': '+a.join(', '))});return parts.join(' | ')}
+function notesSummary(r){const parts=[];STAGE_TABS.forEach(s=>{const a=(r.stageNotes||{})[s.k]||[];a.forEach(n=>parts.push((s.k===GENERAL?'General':s.n)+' ('+n.by+' '+fmtTime(n.at)+'): '+n.t))});return parts.join(' | ')}
+function photoCounts(r){const c=r.photoCounts||{};return STAGE_TABS.map(s=>c[s.k]||0)}
+
+function photoTotal(r){const c=r.photoCounts;return c?Object.values(c).reduce((a,b)=>a+b,0):(S.photos[r.id]||[]).length}
+
+function renderProblemStages(){
+  const el=$('#pstab');if(!el||!S.isAdmin)return;
+  const m=S.problemStageMap||{};
+  const abbr={unload:'Desc.',check:'Verif.',receipt:'Recep.',label:'Etich.',quality:'Calit.',rack:'Raft'};
+  el.innerHTML='<div></div>'+STAGES.map(s=>`<div class="h" title="${esc(s.n)}">${abbr[s.k]}</div>`).join('')+
+    S.problems.map(p=>`<div>${esc(p)}</div>`+STAGES.map(s=>`<div style="text-align:center"><input type="checkbox" data-pst="${esc(p)}" data-pstk="${s.k}" ${(m[p]||[]).includes(s.k)?'checked':''}></div>`).join('')).join('');
+}
+document.addEventListener('change',e=>{
+  if(!e.target.matches('[data-pst]'))return;
+  const p=e.target.dataset.pst,k=e.target.dataset.pstk;S.problemStageMap=S.problemStageMap||{};
+  const a=new Set(S.problemStageMap[p]||[]);e.target.checked?a.add(k):a.delete(k);
+  if(a.size)S.problemStageMap[p]=[...a];else delete S.problemStageMap[p];
+  Store.saveSettings();
+});
+
 /* ---------- acțiuni recepție ---------- */
 function setStage(rec,k,now){
   rec.segments=rec.segments||[];
@@ -1027,7 +1185,7 @@ $('#activeList').addEventListener('click',e=>{
   const rec=S.receptions.find(r=>r.id===card.dataset.id);if(!rec)return;
   const now=Date.now();
   const st=e.target.closest('[data-stage]');
-  if(st){const k=st.dataset.stage;if(activeStage(rec)===k)setStage(rec,null,now);else setStage(rec,k,now);Store.saveRec(rec);return}
+  if(st){const k=st.dataset.stage;if(activeStage(rec)===k)setStage(rec,null,now);else{setStage(rec,k,now);S.uiStage[rec.id]=k}Store.saveRec(rec);return}
   const pb=e.target.closest('[data-prob]');
   if(pb){const p=pb.dataset.prob;rec.problems=rec.problems||[];rec.problems=rec.problems.includes(p)?rec.problems.filter(x=>x!==p):rec.problems.concat([p]);Store.saveRec(rec);return}
   const act=e.target.closest('[data-act]')?.dataset.act;
@@ -1062,7 +1220,7 @@ $('#histBody').addEventListener('click',e=>{
     return;
   }
   const row=e.target.closest('tr.row');if(!row)return;
-  S.openRow=S.openRow===row.dataset.id?null:row.dataset.id;render();
+  S.openRow=S.openRow===row.dataset.id?null:row.dataset.id;if(fs)ensurePhotoSubs(S.receptions.filter(r=>r.status==='active').map(r=>r.id).concat(S.openRow?[S.openRow]:[]));render();
 });
 $('#histBody').addEventListener('change',e=>{
   const f=e.target.dataset.efield;if(!f)return;
@@ -1077,16 +1235,43 @@ $('#histBody').addEventListener('change',e=>{
 $('#btnExport').addEventListener('click',async()=>{
   const rows=filteredHistory(S.receptions.filter(r=>r.status==='done'));
   if(!rows.length){toast('Nimic de exportat pentru filtrele alese');return}
-  const H=['Zi operațională','Schimb','Data calendaristică','Ora start','Ora sfârșit','Slot programat','Furnizor','Transportator','Proiect','Nr. auto','Operator','Nr. aviz / notă','Paleți programați','Paleți','Diferență paleți','Cutii','Durată totală (min)','Standard (min)','Diferență (min)',...STAGES.map(s=>s.n+' (min)'),'Probleme','Observații'];
+  const H=['Zi operațională','Schimb','Data calendaristică','Ora start','Ora sfârșit','Slot programat','Furnizor','Transportator','Proiect','Nr. auto','Operator','Nr. aviz / notă','Paleți programați','Paleți','Diferență paleți','Cutii','Durată totală (min)','Standard (min)','Diferență (min)',...STAGES.map(s=>s.n+' (min)'),'Probleme (pe etape)','Comentarii etape',...STAGE_TABS.map(s=>'Poze '+(s.k===GENERAL?'general':s.n)),'Poze total','Observații'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
   const lines=[H.map(q).join(';')];
   for(const r of rows){const tot=Math.round(totalMs(r)/60000);
     const sc=r.scheduleId?schedOf(r.scheduleId):null;
     lines.push([fmtOpDate(r.startedAt),'S'+shiftOf(r.startedAt),fmtDate(r.startedAt),fmtTime(r.startedAt),fmtTime(r.finishedAt),sc?slotLabel(sc.slot):'',r.supplier,r.transport||'',r.project||'',r.plate,r.operator,r.ref,r.plannedPallets,r.pallets,r.plannedPallets!=null&&r.pallets!=null?r.pallets-r.plannedPallets:'',r.boxes,tot,r.stdTotal,r.stdTotal!=null?tot-r.stdTotal:'',
-      ...STAGES.map(s=>Math.round(stageMs(r,s.k)/60000)),(r.problems||[]).join(' | '),r.note].map(q).join(';'))}
+      ...STAGES.map(s=>Math.round(stageMs(r,s.k)/60000)),problemsSummary(r),notesSummary(r),...photoCounts(r),photoTotal(r),r.note].map(q).join(';'))}
   const csv='\uFEFF'+lines.join('\r\n');
   const name='receptii_'+opKey(Date.now())+'.csv';
   const file=new File([csv],name,{type:'text/csv;charset=utf-8'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name});return}catch(e){if(e.name==='AbortError')return}}
+  const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);
+});
+
+/* raport HTML cu poze */
+$('#btnExportHtml').addEventListener('click',async()=>{
+  const rows=filteredHistory(S.receptions.filter(r=>r.status==='done'));
+  if(!rows.length){toast('Nimic de exportat pentru filtrele alese');return}
+  if(rows.length>60&&!confirm(rows.length+' recepții — raportul cu poze poate fi mare. Continui?'))return;
+  toast('Se pregătește raportul…');
+  const ids=rows.map(r=>r.id);const photos={};
+  for(let i=0;i<ids.length;i+=30){try{const q=await fs.collection('photos').where('receptionId','in',ids.slice(i,i+30)).get();q.docs.forEach(d=>{const p=d.data();(photos[p.receptionId]=photos[p.receptionId]||[]).push(p)})}catch(e){console.error(e)}}
+  const h=[];h.push(`<!DOCTYPE html><html lang="ro"><head><meta charset="utf-8"><title>Raport recepții</title><style>body{font-family:system-ui,sans-serif;margin:20px;color:#1a2230}h1{font-size:20px}h2{font-size:16px;margin:26px 0 6px;border-top:2px solid #245C9E;padding-top:10px}table{border-collapse:collapse;font-size:13px;margin-bottom:8px}td,th{border:1px solid #ccc;padding:4px 8px;text-align:left}th{background:#eef2f7}.st{margin:8px 0 4px;font-weight:600;font-size:13px}.ph{display:flex;flex-wrap:wrap;gap:8px}.ph figure{margin:0;width:260px}.ph img{width:260px;height:195px;object-fit:cover;border:1px solid #ccc;border-radius:4px}.ph figcaption{font-size:11px;color:#666}.cm{font-size:12.5px;background:#f3f5f8;padding:4px 8px;border-radius:4px;margin:2px 0}@media print{h2{break-before:page}}</style></head><body>`);
+  h.push(`<h1>Raport recepții camioane</h1><p>${rows.length} recepții · generat ${fmtDate(Date.now())} ${fmtTime(Date.now())} de ${esc(S.me?.name||'')}${$('#fFrom').value||$('#fTo').value?' · perioada '+($('#fFrom').value||'…')+' → '+($('#fTo').value||'…'):''}</p>`);
+  for(const r of rows){const tot=Math.round(totalMs(r)/60000);const ps=(photos[r.id]||[]).sort((a,b)=>a.at-b.at);
+    h.push(`<h2>${esc(r.supplier)} · ${esc(r.plate||'—')} · ${fmtOpDate(r.startedAt)} S${shiftOf(r.startedAt)}</h2>`);
+    h.push(`<table><tr><th>Start</th><td>${fmtDate(r.startedAt)} ${fmtTime(r.startedAt)}</td><th>Sfârșit</th><td>${fmtTime(r.finishedAt)}</td><th>Durată</th><td>${tot} min${r.stdTotal!=null?' (standard '+r.stdTotal+')':''}</td></tr><tr><th>Operator</th><td>${esc(r.operator||'—')}</td><th>Paleți</th><td>${r.pallets??'—'}${r.plannedPallets!=null?' / programat '+r.plannedPallets:''}</td><th>Cutii</th><td>${r.boxes??'—'}</td></tr>${r.note?`<tr><th>Observații</th><td colspan="5">${esc(r.note)}</td></tr>`:''}</table>`);
+    for(const s of STAGE_TABS){const pr=stageProblems(r,s.k),nt=stageNotes(r,s.k),pp=ps.filter(p=>p.stage===s.k);if(!pr.length&&!nt.length&&!pp.length)continue;
+      h.push(`<div class="st">${esc(s.k===GENERAL?'General':s.n)}${s.k!==GENERAL?' · '+Math.round(stageMs(r,s.k)/60000)+' min':''}</div>`);
+      if(pr.length)h.push(`<div>Probleme: <b>${esc(pr.join(', '))}</b></div>`);
+      nt.forEach(n=>h.push(`<div class="cm">${esc(n.t)} <span style="color:#888">— ${esc(n.by)}, ${fmtTime(n.at)}</span></div>`));
+      if(pp.length)h.push(`<div class="ph">${pp.map(p=>`<figure><img src="${p.data}"><figcaption>${esc(p.by)} · ${fmtDate(p.at)} ${fmtTime(p.at)}</figcaption></figure>`).join('')}</div>`);
+    }
+  }
+  h.push('</body></html>');
+  const name='raport_receptii_'+opKey(Date.now())+'.html';
+  const file=new File([h.join('\n')],name,{type:'text/html;charset=utf-8'});
   if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name});return}catch(e){if(e.name==='AbortError')return}}
   const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);
 });
@@ -1141,7 +1326,7 @@ $('#daySave').addEventListener('click',()=>{if(!S.isAdmin){toast('Doar administr
 /* setări: probleme */
 $('#prAdd').addEventListener('click',()=>{if(!S.canRecv){toast('Doar depozitul sau administratorul');return}const v=$('#prNew').value.trim();if(!v)return;if(!S.problems.includes(v))S.problems.push(v);$('#prNew').value='';Store.saveSettings()});
 $('#prNew').addEventListener('keydown',e=>{if(e.key==='Enter')$('#prAdd').click()});
-$('#prList').addEventListener('click',e=>{const p=e.target.dataset.prdel;if(p!=null&&!S.isAdmin){toast('Doar administratorul poate șterge din catalog');return}if(p!=null&&confirm('Ștergi „'+p+'” din catalog?')){S.problems=S.problems.filter(x=>x!==p);Store.saveSettings()}});
+$('#prList').addEventListener('click',e=>{const p=e.target.dataset.prdel;if(p!=null&&!S.isAdmin){toast('Doar administratorul poate șterge din catalog');return}if(p!=null&&confirm('Ștergi „'+p+'” din catalog?')){S.problems=S.problems.filter(x=>x!==p);if(S.problemStageMap)delete S.problemStageMap[p];Store.saveSettings()}});
 
 /* tabs */
 function switchTab(t){S.tab=t;document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t));
