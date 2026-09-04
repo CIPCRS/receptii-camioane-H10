@@ -10,10 +10,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="Recepții">
+<meta name="apple-mobile-web-app-title" content="Recepții H10">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
@@ -447,7 +447,7 @@ input,select,textarea{font-size:16px}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '2.2.1';
+const APP_VERSION = '2.2.3';
 const ROLES={admin:'Administrator',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
 const CFG = window.RECEPTII_CONFIG || {};
@@ -1178,6 +1178,26 @@ function setStage(rec,k,now){
   if(last&&last.b==null){last.b=now;if(last.s===k){return}}
   if(k)rec.segments.push({s:k,a:now,b:null});
 }
+function confirmFinish(rec){
+  const tot=totalMs(rec,Date.now()),std=rec.stdTotal??stdTotal(supOf(rec.supplier));
+  const nProb=(rec.problems||[]).length+STAGES.reduce((a,s)=>a+(((rec.stageProblems||{})[s.k])||[]).length,0);
+  openModal(`<div class="bh"><h2>Termini recepția?</h2><span class="spacer"></span><button class="btn ghost sm" data-close>✕</button></div>
+    <div class="bb">
+      <p style="margin:0;font-size:15px">Ești sigur că vrei să termini recepția pentru <b>${esc(rec.supplier)}</b>${rec.plate?` · <span class="plate" style="font-size:12px;padding:2px 6px">${esc(rec.plate)}</span>`:''}?</p>
+      <div class="plan-hint" style="background:var(--surface2);border-color:var(--line)">
+        <span>Durată: <b class="mono">${fmtMin(tot)}</b>${std?` (standard ${std} min)`:''} · Paleți: <b class="mono">${rec.pallets}</b>${rec.plannedPallets!=null?` (programat ${rec.plannedPallets})`:''}${rec.boxes!=null?` · Cutii: <b class="mono">${rec.boxes}</b>`:''}</span>
+        <span class="muted" style="font-size:12.5px">${nProb?nProb+' probleme bifate':'Nicio problemă bifată'} · ${photoTotal(rec)} poze · cronometrul se oprește, recepția trece în Istoric (se poate redeschide).</span>
+      </div>
+    </div>
+    <div class="bf"><button type="button" class="btn" data-close>Nu, mai lucrez</button><button type="button" class="btn ok" id="cfFinish">✔ Da, termină recepția</button></div>`);
+  $('#cfFinish').addEventListener('click',()=>{
+    const now=Date.now();const r=S.receptions.find(x=>x.id===rec.id);if(!r||r.status!=='active'){closeModal();return}
+    setStage(r,null,now);r.status='done';r.finishedAt=now;r.finishedBy=S.me?.email||null;Store.saveRec(r);toast('Recepție terminată: '+fmtMin(totalMs(r)));
+    if(r.scheduleId){const sc=schedOf(r.scheduleId);if(sc&&sc.status!=='done'){sc.status='done';Store.saveSched(sc)}}
+    closeModal();
+  });
+  setTimeout(()=>{const b=$('#cfFinish');if(b)b.focus()},40);
+}
 function newReception(d){
   const now=Date.now(),sup=supOf(d.supplier);
   const rec={id:'r'+uid(),supplier:d.supplier,plate:d.plate,operator:d.operator,pallets:d.pallets,boxes:null,ref:'',note:'',problems:[],
@@ -1200,8 +1220,7 @@ $('#activeList').addEventListener('click',e=>{
   if(act==='pause'){setStage(rec,null,now);Store.saveRec(rec)}
   if(act==='finish'){
     if(rec.pallets==null||rec.pallets===''){toast('Introdu numărul real de paleți descărcați înainte de a termina recepția');const i=card.querySelector('[data-field=pallets]');if(i){i.focus();i.style.outline='2px solid var(--bad)';setTimeout(()=>i.style.outline='',2500)}return}
-    setStage(rec,null,now);rec.status='done';rec.finishedAt=now;rec.finishedBy=S.me?.email||null;Store.saveRec(rec);toast('Recepție terminată: '+fmtMin(totalMs(rec)));
-    if(rec.scheduleId){const sc=schedOf(rec.scheduleId);if(sc&&sc.status!=='done'){sc.status='done';Store.saveSched(sc)}}
+    confirmFinish(rec);
   }
   if(act==='cancel'){if(!S.isAdmin){toast('Doar administratorul poate anula/șterge recepții');return}if(confirm('Anulezi această recepție? Rămâne în Istoric → „Recepții șterse”, cu numele tău.'))Store.delRec(rec.id)}
 });

@@ -1,6 +1,6 @@
 {
-  "name": "Recepții camioane",
-  "short_name": "Recepții",
+  "name": "Recepții camioane H10",
+  "short_name": "Recepții H10",
   "description": "Evidența camioanelor descărcate: furnizor, nr. auto, paleți, probleme și cronometru pe etape.",
   "start_url": "./",
   "scope": "./",
@@ -10,8 +10,29 @@
   "theme_color": "#245C9E",
   "lang": "ro",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
