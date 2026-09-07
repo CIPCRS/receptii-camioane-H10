@@ -459,7 +459,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '2.4.0';
+const APP_VERSION = '2.4.1';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
 const CFG = window.RECEPTII_CONFIG || {};
@@ -1365,7 +1365,7 @@ $('#btnExportHtml').addEventListener('click',async()=>{
   h.push(`<h1>Raport recepții camioane</h1><p>${rows.length} recepții · generat ${fmtDate(Date.now())} ${fmtTime(Date.now())} de ${esc(S.me?.name||'')}${$('#fFrom').value||$('#fTo').value?' · perioada '+($('#fFrom').value||'…')+' → '+($('#fTo').value||'…'):''}</p>`);
   for(const r of rows){const tot=Math.round(totalMs(r)/60000);const ps=(photos[r.id]||[]).sort((a,b)=>a.at-b.at);
     h.push(`<h2>${esc(r.supplier)} · ${esc(r.plate||'—')} · ${fmtOpDate(r.startedAt)} S${shiftOf(r.startedAt)}</h2>`);
-    h.push(`<table><tr><th>Start</th><td>${fmtDate(r.startedAt)} ${fmtTime(r.startedAt)}</td><th>Sfârșit</th><td>${fmtTime(r.finishedAt)}</td><th>Durată</th><td>${tot} min${r.stdTotal!=null?' (standard '+r.stdTotal+')':''}</td></tr><tr><th>Operator</th><td>${esc(r.operator||'—')}</td><th>Paleți</th><td>${r.pallets??'—'}${r.plannedPallets!=null?' / programat '+r.plannedPallets:''}</td><th>Cutii</th><td>${r.boxes??'—'}</td></tr>${r.note?`<tr><th>Observații</th><td colspan="5">${esc(r.note)}</td></tr>`:''}</table>`);
+    h.push(`<table><tr><th>Start</th><td>${fmtDate(r.startedAt)} ${fmtTime(r.startedAt)}</td><th>Sfârșit</th><td>${fmtDate(r.finishedAt)} ${fmtTime(r.finishedAt)}</td><th>Durată</th><td>${tot} min${r.stdTotal!=null?' (standard '+r.stdTotal+')':''}</td></tr><tr><th>Operator</th><td>${esc(r.operator||'—')}</td><th>Paleți</th><td>${r.pallets??'—'}${r.plannedPallets!=null?' / programat '+r.plannedPallets:''}</td><th>Cutii</th><td>${r.boxes??'—'}</td></tr>${r.note?`<tr><th>Observații</th><td colspan="5">${esc(r.note)}</td></tr>`:''}</table>`);
     for(const s of STAGE_TABS){const pr=stageProblems(r,s.k),nt=stageNotes(r,s.k),pp=ps.filter(p=>p.stage===s.k);if(!pr.length&&!nt.length&&!pp.length)continue;
       h.push(`<div class="st">${esc(s.k===GENERAL?'General':s.n)}${s.k!==GENERAL?' · '+Math.round(stageMs(r,s.k)/60000)+' min':''}</div>`);
       if(pr.length)h.push(`<div>Probleme: <b>${esc(pr.join(', '))}</b></div>`);
