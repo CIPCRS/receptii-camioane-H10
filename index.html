@@ -184,8 +184,9 @@ th.num{text-align:right}
 .tag button:hover{color:var(--bad)}
 
 /* modal */
-.modal{position:fixed;inset:0;background:rgba(10,16,24,.5);display:grid;place-items:center;padding:20px;z-index:20}
-.modal .box{background:var(--surface);border-radius:12px;width:min(560px,100%);box-shadow:var(--shadow);border:1px solid var(--line)}
+.modal{position:fixed;inset:0;background:rgba(10,16,24,.5);display:flex;flex-direction:column;align-items:center;padding:20px;z-index:20;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+html.modal-open,html.modal-open body{overflow:hidden;overscroll-behavior:none}
+.modal .box{background:var(--surface);border-radius:12px;width:min(560px,100%);box-shadow:var(--shadow);border:1px solid var(--line);margin:auto;flex-shrink:0}
 .modal .bh{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center}
 .modal .bh h2{font-size:18px;font-weight:600}
 .modal .bb{padding:18px 20px;display:grid;gap:14px}
@@ -459,7 +460,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '2.5.0';
+const APP_VERSION = '2.5.1';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
 const CFG = window.RECEPTII_CONFIG || {};
@@ -1442,9 +1443,9 @@ function switchTab(t){S.tab=t;document.querySelectorAll('.tab').forEach(b=>b.set
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 
 /* ---------- modale ---------- */
-function openModal(html){const m=$('#modal');m.innerHTML=`<div class="box" role="dialog" aria-modal="true">${html}</div>`;m.hidden=false;
+function openModal(html){const m=$('#modal');m.innerHTML=`<div class="box" role="dialog" aria-modal="true">${html}</div>`;m.hidden=false;m.scrollTop=0;document.documentElement.classList.add('modal-open');
   const f=m.querySelector('input,select');if(f)setTimeout(()=>f.focus(),30)}
-function closeModal(){$('#modal').hidden=true;$('#modal').innerHTML=''}
+function closeModal(){$('#modal').hidden=true;$('#modal').innerHTML='';document.documentElement.classList.remove('modal-open')}
 $('#modal').addEventListener('click',e=>{if(e.target.id==='modal'||e.target.dataset.close!=null)closeModal()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#modal').hidden)closeModal()});
 
