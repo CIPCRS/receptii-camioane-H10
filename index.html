@@ -190,6 +190,7 @@ html.modal-open,html.modal-open body{overflow:hidden;overscroll-behavior:none}
 .modal .bh{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center}
 .modal .bh h2{font-size:18px;font-weight:600}
 .modal .bb{padding:18px 20px;display:grid;gap:14px}
+.slottag{display:inline-block;margin-top:3px;font-size:11px;font-family:var(--mono);background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:8px}
 .modal .bf{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end}
 .stdgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:var(--shadow);z-index:30;transition:opacity .2s}
@@ -251,6 +252,10 @@ input,select,textarea{font-size:16px}
 .cfgwarn{background:var(--bad-soft);border:1px solid var(--bad);border-radius:10px;padding:14px;font-size:13px;line-height:1.5}
 .cfgwarn code{font-family:var(--mono);background:var(--surface);padding:1px 5px;border-radius:4px}
 .admin-only{display:none}.is-admin .admin-only{display:initial}
+.is-gate .tabs,.is-gate #btnNew{display:none}
+.gtag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;font-family:var(--mono);background:var(--surface2);color:var(--ink2)}.gtag.in{background:var(--ok-soft);color:var(--ok)}.gtag.out{background:var(--surface2);color:var(--muted)}
+.gbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.gbar input{flex:1;min-width:160px}
+.prow.gone{opacity:.55}
 .planner-only{display:none}.can-plan .planner-only{display:initial}
 .recv-only{display:none}.can-recv .recv-only{display:initial}
 .rolebadge{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;padding:2px 7px;border-radius:999px;background:var(--surface2);color:var(--ink2);font-weight:600}
@@ -306,7 +311,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 .tle{display:grid;grid-template-columns:auto auto auto 1fr;gap:10px;align-items:center;font-size:12.5px}
 .tln{color:var(--ink2);font-style:italic}
 .prow.onhold{border-style:dashed;border-color:var(--warn);opacity:.9}
-@media (max-width:640px){.tle{grid-template-columns:auto auto;row-gap:2px}} .st.arrived{background:var(--warn-soft);color:var(--warn)} .st.receiving{background:var(--accent-soft);color:var(--accent)} .st.done{background:var(--ok-soft);color:var(--ok)} .st.cancelled{background:var(--bad-soft);color:var(--bad)} .st.noshow{background:var(--bad-soft);color:var(--bad)}
+@media (max-width:640px){.tle{grid-template-columns:auto auto;row-gap:2px}} .st.arrived{background:var(--warn-soft);color:var(--warn)} .st.receiving{background:var(--accent-soft);color:var(--accent)} .st.done{background:var(--ok-soft);color:var(--ok)} .st.cancelled{background:var(--bad-soft);color:var(--bad)} .st.noshow{background:var(--bad-soft);color:var(--bad)} .st.gate-in{background:var(--ok-soft);color:var(--ok)} .st.gate-out{background:var(--surface2);color:var(--muted)}
 .daynav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
 .daynav .dlabel{font-family:var(--display);font-weight:600;font-size:18px}
 .daynav input[type=date]{border:1px solid var(--line2);border-radius:6px;padding:7px 10px;background:var(--surface)}
@@ -346,6 +351,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
     <button class="tab" role="tab" data-tab="schedule" aria-selected="false">Programări<span class="n" id="nSched">0</span></button>
     <button class="tab" role="tab" data-tab="suppliers" aria-selected="false">Furnizori</button>
     <button class="tab" role="tab" data-tab="settings" aria-selected="false">Setări</button>
+    <button class="tab admin-only" role="tab" data-tab="gate" aria-selected="false">Poartă</button>
   </nav>
 
   <div class="offline" id="offline">⚠ Fără conexiune — modificările se salvează local și se trimit când revine semnalul.</div>
@@ -422,7 +428,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
         <h2>Operatori</h2>
         <p>Persoanele care se pot conecta, fiecare cu un singur rol: <b>Depozit</b> (pornește recepții planificate sau neplanificate, marchează sosirea, corectează și redeschide recepții, adaugă furnizori noi și probleme în catalog), <b>Planificator</b> (introduce, modifică și anulează programări, marchează urgențe; nu atinge recepțiile), <b>Planificator admin</b> (ca planificatorul, în plus stabilește ordinea urgențelor #1, #2…), <b>Vizualizare</b> (vede totul în timp real, filtrează și exportă, nu modifică nimic), <b>Administrator</b> (toate drepturile, inclusiv ștergeri, timpi standard, operatori). <span class="admin-only">Ca administrator poți adăuga operatori (nume + PIN) și îi poți dezactiva. Pentru a reseta PIN-ul altcuiva: dezactivează-l aici, șterge utilizatorul din Firebase Console → Authentication, apoi adaugă-l din nou cu PIN nou.</span></p>
         <div class="chips" id="opList" style="margin-bottom:10px"></div>
-        <div class="inl admin-only"><input id="opNew" placeholder="Nume operator"><input id="opPin" class="pinfield" inputmode="numeric" maxlength="6" placeholder="PIN (6 cifre)"><select id="opRole" class="rosel" style="padding:7px 10px;font-size:14px"><option value="warehouse">Depozit</option><option value="planner">Planificator</option><option value="planner_admin">Planificator admin (urgențe)</option><option value="viewer">Vizualizare</option><option value="admin">Administrator</option></select><button class="btn" id="opAdd">Adaugă</button></div>
+        <div class="inl admin-only"><input id="opNew" placeholder="Nume operator"><input id="opPin" class="pinfield" inputmode="numeric" maxlength="6" placeholder="PIN (6 cifre)"><select id="opRole" class="rosel" style="padding:7px 10px;font-size:14px"><option value="warehouse">Depozit</option><option value="planner">Planificator</option><option value="planner_admin">Planificator admin (urgențe)</option><option value="viewer">Vizualizare</option><option value="gate">Portar (poartă)</option><option value="admin">Administrator</option></select><button class="btn" id="opAdd">Adaugă</button></div>
       </div>
       <div class="sec">
         <h2>Ziua operațională și schimburile</h2>
@@ -445,6 +451,11 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
         <p class="muted" style="font-size:12px" id="verInfo"></p>
       </div>
     </section>
+    <section id="tab-gate" hidden>
+      <div class="gbar"><h2 style="margin:0" id="gateDay"></h2><span class="spacer"></span><input id="gateQ" placeholder="Caută nr. auto / furnizor…" autocomplete="off"></div>
+      <p class="muted" style="font-size:12.5px;margin:0 0 10px">Apasă <b>Intrat în curte</b> când camionul intră și <b>Ieșit din curte</b> când pleacă. Poți anula doar propria apăsare, cu „anulează”.</p>
+      <div class="plan" id="gateList"></div>
+    </section>
   </main>
 </div>
 
@@ -460,8 +471,9 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '2.5.1';
-const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare'};
+const APP_VERSION = '2.6.0';
+const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
+const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
 const CFG = window.RECEPTII_CONFIG || {};
 const STAGES = [
@@ -660,6 +672,9 @@ function applyRoles(){
   S.canPlan=S.isAdmin||S.role==='planner'||S.role==='planner_admin';S.isPlanner=S.canPlan;
   S.canRank=S.isAdmin||S.role==='planner_admin';
   S.canRecv=S.isAdmin||S.role==='warehouse';
+  S.isGate=S.role==='gate';S.canGate=S.isGate||S.isAdmin;
+  document.body.classList.toggle('is-gate',S.isGate);
+  if(S.isGate&&S.tab!=='gate')switchTab('gate');else if(!S.isGate&&S.tab==='gate')switchTab('active');
   document.body.classList.toggle('is-admin',S.isAdmin);
   document.body.classList.toggle('can-plan',S.canPlan);
   document.body.classList.toggle('can-recv',S.canRecv);
@@ -740,6 +755,13 @@ const Store = {
     else S.schedExtra=S.schedExtra.filter(x=>x.id!==sc.id).concat([sc]);
     scheduleRender();
     fs.doc('schedules/'+sc.id).set(sc).catch(e=>toast(e.code==='permission-denied'?'Nu ai drept de planificator':'Eroare la salvarea programării'));
+  },
+  /* portar: scrie doar câmpurile de poartă (update), ca să nu atingă restul programării */
+  async saveGate(sc){
+    sc.updatedAt=Date.now();sc.updatedBy=S.me?.name||S.me?.email||'?';
+    S.schedules=S.schedules.map(x=>x.id===sc.id?sc:x);S.schedExtra=S.schedExtra.map(x=>x.id===sc.id?sc:x);scheduleRender();
+    const d={gateIn:sc.gateIn??null,gateInBy:sc.gateInBy??null,gateOut:sc.gateOut??null,gateOutBy:sc.gateOutBy??null,gateLog:sc.gateLog||[],updatedAt:sc.updatedAt,updatedBy:sc.updatedBy};
+    fs.doc('schedules/'+sc.id).update(d).catch(e=>toast(e.code==='permission-denied'?'Nu ai drept să marchezi poarta':'Eroare la salvare: '+(e.message||e)));
   }
 };
 
@@ -757,7 +779,7 @@ function render(){
   const act=S.receptions.filter(r=>r.status==='active');
   const done=S.receptions.filter(r=>r.status==='done');
   $('#nActive').textContent=act.length;$('#nDone').textContent=done.length;
-  renderStats(act,done);renderPlanned();renderActive(act);renderSchedule();renderHistory($('#fDel').checked?S.receptions.filter(r=>r.status==='deleted'):done);$('#nDel').textContent=S.receptions.filter(r=>r.status==='deleted').length;renderSuppliers();renderSettings();
+  renderStats(act,done);renderPlanned();renderActive(act);renderSchedule();renderHistory($('#fDel').checked?S.receptions.filter(r=>r.status==='deleted'):done);$('#nDel').textContent=S.receptions.filter(r=>r.status==='deleted').length;renderSuppliers();renderSettings();renderGate();
 }
 
 function renderStats(act,done){
@@ -787,7 +809,7 @@ function renderActive(act){
     const tot=totalMs(r,now);
     return `<article class="card" data-id="${r.id}">
       <div class="head">
-        <div class="who"><h3>${esc(r.supplier)}</h3><div class="meta">Început ${fmtTime(r.startedAt)} · ${fmtDate(r.startedAt)}${r.operator?' · '+esc(r.operator):''}${r.scheduleId&&schedOf(r.scheduleId)?' · programat '+slotLabel(schedOf(r.scheduleId).slot):''}${r.transport?' · '+esc(r.transport):''}</div></div>
+        <div class="who"><h3>${esc(r.supplier)}</h3><div class="meta">Început ${fmtTime(r.startedAt)} · ${fmtDate(r.startedAt)}${r.operator?' · '+esc(r.operator):''}${slotOfRec(r)!=null?' · programat '+slotLabel(slotOfRec(r)):''}${r.transport?' · '+esc(r.transport):''}</div></div>
         <span class="plate">${esc(r.plate||'—')}</span>
         <div class="timer ${ratioClass(tot/60000,std)}"><div class="t" data-timer-total>${fmtHMS(tot)}</div><div class="std">${std?'standard '+std+' min':'fără timp standard'}${cur?' · '+STAGE_BY[cur].n.toLowerCase():' · nicio etapă activă'}</div></div>
       </div>
@@ -852,7 +874,7 @@ function renderHistory(done){
     const open=S.openRow===r.id;
     const del=r.status==='deleted';
     return `<tr class="row ${open?'open':''}" data-id="${r.id}" style="${del?'opacity:.75':''}">
-      <td>${del?`<div class="pill bad" style="margin-bottom:3px">ștearsă de ${esc(r.deletedBy||'?')} · ${fmtDate(r.deletedAt)} ${fmtTime(r.deletedAt)}</div>`:''}<div>${fmtOpDate(r.startedAt)} <span class="muted" style="font-size:11px">S${shiftOf(r.startedAt)}</span></div><div class="muted mono" style="font-size:12px">${fmtTime(r.startedAt)}–${fmtTime(r.finishedAt)}${dayKey(r.startedAt)!==opKey(r.startedAt)?' <span title="după miezul nopții, aparține zilei operaționale anterioare">+1</span>':''}</div></td>
+      <td>${del?`<div class="pill bad" style="margin-bottom:3px">ștearsă de ${esc(r.deletedBy||'?')} · ${fmtDate(r.deletedAt)} ${fmtTime(r.deletedAt)}</div>`:''}<div>${fmtOpDate(r.startedAt)} <span class="muted" style="font-size:11px">S${shiftOf(r.startedAt)}</span></div><div class="muted mono" style="font-size:12px">${fmtTime(r.startedAt)}–${fmtTime(r.finishedAt)}${dayKey(r.startedAt)!==opKey(r.startedAt)?' <span title="după miezul nopții, aparține zilei operaționale anterioare">+1</span>':''}</div>${slotTag(r)}</td>
       <td><b style="${del?'text-decoration:line-through':''}">${esc(r.supplier)}</b>${r.ref?`<div class="muted" style="font-size:12px">${esc(r.ref)}</div>`:''}</td>
       <td><span class="plate" style="font-size:12px;padding:2px 6px">${esc(r.plate||'—')}</span></td>
       <td>${esc(r.operator||'—')}</td>
@@ -912,6 +934,8 @@ function renderSettings(){
 function allSched(){const ids=new Set(S.schedules.map(x=>x.id));return S.schedules.concat(S.schedExtra.filter(x=>!ids.has(x.id)))}
 function schedFor(day){return allSched().filter(x=>x.day===day).sort((a,b)=>slotOrder(a.slot)-slotOrder(b.slot)||(a.createdAt||0)-(b.createdAt||0))}
 function schedOf(id){return allSched().find(x=>x.id===id)}
+function slotOfRec(r){if(r.plannedSlot!=null)return r.plannedSlot;const sc=r.scheduleId?schedOf(r.scheduleId):null;return sc?sc.slot:null}
+function slotTag(r){const sl=slotOfRec(r);return sl==null?'':`<span class="slottag" title="Slotul programării">slot ${slotLabel(sl)}</span>`}
 function recOfSched(sc){return S.receptions.find(r=>r.scheduleId===sc.id&&r.status!=='deleted')}
 function schedStatus(sc){if(sc.status==='cancelled')return 'cancelled';const r=recOfSched(sc);if(r)return r.status==='done'?'done':'receiving';return sc.status||'planned'}
 /* schimbare de status cu jurnal (cine, când, notă) */
@@ -919,14 +943,14 @@ function logStatus(sc,status,note){sc.statusLog=sc.statusLog||[];if(!sc.statusLo
   sc.status=status;sc.statusLog.push({s:status,at:Date.now(),by:S.me?.name||'?',...(note?{note}:{})});
   if(status==='arrived'&&!sc.arrivedAt)sc.arrivedAt=Date.now();
   if(status==='onhold'){sc.holdReason=note||'';sc.holdAt=Date.now()}else{sc.holdReason='';}}
-function statusTimeline(sc,rec){const ev=[];(sc&&sc.statusLog||[]).forEach(e=>ev.push({at:e.at,label:SCHED_STATUS[e.s]||e.s,by:e.by,note:e.note}));
+function statusTimeline(sc,rec){const ev=[];(sc&&sc.statusLog||[]).forEach(e=>ev.push({at:e.at,label:SCHED_STATUS[e.s]||e.s,by:e.by,note:e.note}));(sc&&sc.gateLog||[]).forEach(e=>ev.push({at:e.at,label:GATE_LABEL[e.t]||e.t,by:e.by,gate:e.t,note:e.was?'(marcarea de la '+fmtTime(e.was)+')':undefined}));
   if(sc&&!(sc.statusLog||[]).length&&sc.createdAt)ev.push({at:sc.createdAt,label:'Programat',by:sc.createdBy||''});
   if(rec){if(!ev.some(e=>e.label==='În lucru'))ev.push({at:rec.startedAt,label:'În lucru',by:rec.createdBy?nameOf(rec.createdBy):''});
     if(rec.finishedAt&&rec.status==='done'&&!ev.some(e=>e.label==='Finalizat'))ev.push({at:rec.finishedAt,label:'Finalizat',by:rec.finishedBy?nameOf(rec.finishedBy):''});
     if(rec.deletedAt)ev.push({at:rec.deletedAt,label:'Ștearsă',by:rec.deletedBy});if(rec.restoredAt)ev.push({at:rec.restoredAt,label:'Restaurată',by:rec.restoredBy})}
   return ev.sort((a,b)=>a.at-b.at)}
 function timelineHtml(sc,rec){const ev=statusTimeline(sc,rec);if(!ev.length)return '';
-  return `<div class="f"><label>Istoric status camion</label><div class="tl">${ev.map(e=>`<div class="tle"><span class="mono">${fmtDate(e.at)} ${fmtTime(e.at)}</span><span class="st ${Object.keys(SCHED_STATUS).find(k=>SCHED_STATUS[k]===e.label)||'planned'}">${esc(e.label)}</span><span class="muted">${esc(e.by||'')}</span>${e.note?`<span class="tln">${esc(e.note)}</span>`:''}</div>`).join('')}</div></div>`}
+  return `<div class="f"><label>Istoric status camion</label><div class="tl">${ev.map(e=>`<div class="tle"><span class="mono">${fmtDate(e.at)} ${fmtTime(e.at)}</span><span class="st ${e.gate?(e.gate==='in'?'gate-in':'gate-out'):(Object.keys(SCHED_STATUS).find(k=>SCHED_STATUS[k]===e.label)||'planned')}">${esc(e.label)}</span><span class="muted">${esc(e.by||'')}</span>${e.note?`<span class="tln">${esc(e.note)}</span>`:''}</div>`).join('')}</div></div>`}
 function slotLabel(h){return pad(h)+':00'}
 function urgKey(sc){return sc.urgent?(sc.urgentRank||9999):Infinity}
 function prioritySort(a,b){if(!!a.urgent!==!!b.urgent)return a.urgent?-1:1;const d=a.day.localeCompare(b.day);if(d)return d;if(a.urgent){const ua=urgKey(a),ub=urgKey(b);if(ua!==ub)return ua-ub}return slotOrder(a.slot)-slotOrder(b.slot)}
@@ -940,6 +964,41 @@ function setUrgentRank(sc,newRank){
   list.splice(newRank-1,0,sc);
   list.forEach((x,i)=>{if(x.urgentRank!==i+1){x.urgentRank=i+1;Store.saveSched(x)}});
 }
+
+/* ---------- poartă (portar): intrat / ieșit din curte ---------- */
+function gateState(sc){return sc.gateOut?'out':(sc.gateIn?'in':'')}
+function gateTag(sc){const g=gateState(sc);if(!g)return '';return `<span class="gtag ${g}" title="Marcat de ${esc(g==='in'?sc.gateInBy||'':sc.gateOutBy||'')}">${g==='in'?'în curte '+fmtTime(sc.gateIn):'ieșit '+fmtTime(sc.gateOut)}</span>`}
+function gateAction(sc,a){
+  if(!S.canGate){toast('Doar portarul (sau administratorul) marchează intrarea/ieșirea');return}
+  const me=S.me?.name||S.me?.email||'?';sc.gateLog=sc.gateLog||[];
+  if(a==='in'){if(sc.gateIn){toast('Camionul este deja marcat intrat');return}sc.gateIn=Date.now();sc.gateInBy=me;sc.gateLog.push({t:'in',at:sc.gateIn,by:me})}
+  else if(a==='out'){if(!sc.gateIn){toast('Marchează întâi intrarea în curte');return}if(sc.gateOut){toast('Camionul este deja marcat ieșit');return}sc.gateOut=Date.now();sc.gateOutBy=me;sc.gateLog.push({t:'out',at:sc.gateOut,by:me})}
+  else if(a==='undo'){
+    if(sc.gateOut){if(sc.gateOutBy!==me&&!S.isAdmin){toast('Poți anula doar propria apăsare');return}sc.gateLog.push({t:'undo_out',at:Date.now(),by:me,was:sc.gateOut});sc.gateOut=null;sc.gateOutBy=null}
+    else if(sc.gateIn){if(sc.gateInBy!==me&&!S.isAdmin){toast('Poți anula doar propria apăsare');return}sc.gateLog.push({t:'undo_in',at:Date.now(),by:me,was:sc.gateIn});sc.gateIn=null;sc.gateInBy=null}
+    else return;
+  }
+  Store.saveGate(sc);const g=gateState(sc);toast(a==='undo'?'Anulat — '+(g==='in'?'camionul rămâne în curte':'camionul este din nou neintrat'):GATE_LABEL[a]+' · '+fmtTime(Date.now()));
+}
+function renderGate(){
+  const el=$('#gateList');if(!el)return;
+  const today=opKey(Date.now());$('#gateDay').textContent='Camioane · '+fmtDayKey(today);
+  const q=($('#gateQ').value||'').trim().toLowerCase();
+  const me=S.me?.name||S.me?.email||'?';
+  let rows=allSched().filter(sc=>sc.status!=='cancelled'&&(sc.day===today||(sc.gateIn&&!sc.gateOut)||(sc.day<today&&['planned','arrived','onhold'].includes(schedStatus(sc)))));
+  if(q)rows=rows.filter(sc=>[sc.plate,sc.supplier,sc.transport].some(v=>String(v||'').toLowerCase().includes(q)));
+  rows.sort((a,b)=>{const ga=gateState(a)==='out'?1:0,gb=gateState(b)==='out'?1:0;if(ga!==gb)return ga-gb;return a.day.localeCompare(b.day)||slotOrder(a.slot)-slotOrder(b.slot)});
+  if(!rows.length){el.innerHTML=`<div class="muted" style="text-align:center;padding:30px">${q?'Niciun camion nu corespunde căutării.':'Niciun camion programat pentru ziua de azi.'}</div>`;return}
+  el.innerHTML=rows.map(sc=>{const st=schedStatus(sc),g=gateState(sc);const own=g==='out'?sc.gateOutBy===me:sc.gateInBy===me;
+    return `<div class="prow ${g==='out'?'gone':''} ${sc.urgent?'urgent':''}" data-sched="${sc.id}">
+      <div class="slot">${slotLabel(sc.slot)}${sc.day!==today?`<div class="muted" style="font-size:10px;font-family:var(--sans)">${sc.day.slice(8)}.${sc.day.slice(5,7)}</div>`:''}</div>
+      <div class="pmain"><b>${esc(sc.supplier||'—')}</b> ${sc.plate?`<span class="plate" style="font-size:13px;padding:2px 7px;margin-left:6px">${esc(sc.plate)}</span>`:'<span class="muted" style="font-size:12px;margin-left:6px">fără nr. auto</span>'}
+        <div class="pmeta">${sc.transport?`<span>${esc(sc.transport)}</span>`:''}<span class="st ${st}" style="font-size:11px">${SCHED_STATUS[st]}</span>${gateTag(sc)}${sc.urgent?'<span style="color:var(--bad)">urgent</span>':''}</div></div>
+      <div class="pact">${!g?`<button class="btn sm ok" data-gact="in">Intrat în curte</button>`:''}${g==='in'?`<button class="btn sm primary" data-gact="out">Ieșit din curte</button>`:''}${g&&(own||S.isAdmin)?`<button class="btn ghost sm" data-gact="undo" title="Anulează ultima marcare">anulează</button>`:''}</div>
+    </div>`}).join('');
+}
+$('#gateList').addEventListener('click',e=>{const a=e.target.closest('[data-gact]')?.dataset.gact;if(!a)return;const sc=schedOf(e.target.closest('[data-sched]').dataset.sched);if(sc)gateAction(sc,a)});
+$('#gateQ').addEventListener('input',renderGate);
 
 function renderPlanned(){
   const el=$('#plannedList');if(!el)return;
@@ -955,7 +1014,7 @@ function renderPlanned(){
       <div class="slot">${slotLabel(sc.slot)}${sc.day<today?`<div class="muted" style="font-size:10px;font-family:var(--sans)">${sc.day.slice(8)}.${sc.day.slice(5,7)}</div>`:''}</div>
       <div class="pmain">${urgentBadge(sc)} <b>${esc(sc.supplier||'—')}</b> ${sc.plate?`<span class="plate" style="font-size:12px;padding:2px 6px;margin-left:6px">${esc(sc.plate)}</span>`:''}
         ${sc.urgent&&sc.urgentReason?`<div class="urgwhy">${esc(sc.urgentReason)}</div>`:''}${st==='onhold'&&sc.holdReason?`<div class="urgwhy" style="color:var(--warn)">On hold: ${esc(sc.holdReason)}</div>`:''}
-        <div class="pmeta"><span>Paleți programați: <b>${sc.plannedPallets??'—'}</b></span>${sc.transport?`<span>${esc(sc.transport)}</span>`:''}${sc.project?`<span>${esc(sc.project)}${sc.type?' · '+esc(sc.type):''}</span>`:''}${sc.contact?`<span>contact ${esc(sc.contact)}</span>`:''}${sc.obs?`<span style="color:var(--warn)">${esc(sc.obs)}</span>`:''}${late?'<span style="color:var(--warn)">întârziat</span>':''}</div></div>
+        <div class="pmeta">${gateTag(sc)}<span>Paleți programați: <b>${sc.plannedPallets??'—'}</b></span>${sc.transport?`<span>${esc(sc.transport)}</span>`:''}${sc.project?`<span>${esc(sc.project)}${sc.type?' · '+esc(sc.type):''}</span>`:''}${sc.contact?`<span>contact ${esc(sc.contact)}</span>`:''}${sc.obs?`<span style="color:var(--warn)">${esc(sc.obs)}</span>`:''}${late?'<span style="color:var(--warn)">întârziat</span>':''}</div></div>
       <div class="pact">${S.canRank&&sc.urgent?`<span class="rk"><button type="button" data-sact="up" title="Mai sus în urgențele zilei" ${uIdx<=0?'disabled':''}>▲</button><button type="button" data-sact="down" title="Mai jos în urgențele zilei" ${uIdx>=dayU.length-1?'disabled':''}>▼</button></span>`:''}${S.canRecv?`<select class="rosel" data-sstatus title="Status camion">${WH_STATUSES.map(k=>`<option value="${k}" ${k===st?'selected':''}>${SCHED_STATUS[k]}${k==='arrived'&&st==='arrived'&&sc.arrivedAt?' '+fmtTime(sc.arrivedAt):''}</option>`).join('')}</select>`:`<span class="st ${st}">${SCHED_STATUS[st]}${st==='arrived'&&sc.arrivedAt?' '+fmtTime(sc.arrivedAt):''}</span>`}
         ${S.canRecv?`<button class="btn sm ok" data-sact="start">▶ Pornește recepția</button>`:''}</div>
     </div>`}).join('');
@@ -985,7 +1044,7 @@ function renderSchedule(){
       <td class="num">${sc.plannedPallets??'—'}</td>
       <td class="num">${r&&r.pallets!=null?`${r.pallets}${diff!=null&&diff!==0?` <span class="pill ${diff<0?'warn':'bad'}" style="font-size:11px">${diff>0?'+':''}${diff}</span>`:''}`:'—'}</td>
       <td>${esc(sc.contact||'')}${sc.incoterms?`<div class="muted" style="font-size:11px">${esc(sc.incoterms)}</div>`:''}</td>
-      <td>${S.canRecv&&WH_STATUSES.includes(st)?`<select class="rosel" data-sstatus title="Status camion">${WH_STATUSES.map(k=>`<option value="${k}" ${k===st?'selected':''}>${SCHED_STATUS[k]}</option>`).join('')}</select>`:`<span class="st ${st}">${SCHED_STATUS[st]}</span>`}${st==='onhold'&&sc.holdReason?`<div class="muted" style="font-size:11px;color:var(--warn)">${esc(sc.holdReason)}${sc.holdAt?' · '+fmtTime(sc.holdAt):''}</div>`:''}${st==='cancelled'&&sc.cancelledBy?`<div class="muted" style="font-size:11px">de ${esc(sc.cancelledBy)} · ${fmtDate(sc.cancelledAt)} ${fmtTime(sc.cancelledAt)}</div>`:''}${sc.arrivedAt?`<div class="muted mono" style="font-size:11px">sosit ${fmtTime(sc.arrivedAt)}</div>`:''}${r?`<div class="muted mono" style="font-size:11px">${fmtTime(r.startedAt)}${r.finishedAt?'–'+fmtTime(r.finishedAt):''}</div>`:''}</td>
+      <td>${S.canRecv&&WH_STATUSES.includes(st)?`<select class="rosel" data-sstatus title="Status camion">${WH_STATUSES.map(k=>`<option value="${k}" ${k===st?'selected':''}>${SCHED_STATUS[k]}</option>`).join('')}</select>`:`<span class="st ${st}">${SCHED_STATUS[st]}</span>`}${st==='onhold'&&sc.holdReason?`<div class="muted" style="font-size:11px;color:var(--warn)">${esc(sc.holdReason)}${sc.holdAt?' · '+fmtTime(sc.holdAt):''}</div>`:''}${st==='cancelled'&&sc.cancelledBy?`<div class="muted" style="font-size:11px">de ${esc(sc.cancelledBy)} · ${fmtDate(sc.cancelledAt)} ${fmtTime(sc.cancelledAt)}</div>`:''}${sc.gateIn?`<div style="margin-top:3px">${gateTag(sc)}</div>`:''}${sc.arrivedAt?`<div class="muted mono" style="font-size:11px">sosit ${fmtTime(sc.arrivedAt)}</div>`:''}${r?`<div class="muted mono" style="font-size:11px">${fmtTime(r.startedAt)}${r.finishedAt?'–'+fmtTime(r.finishedAt):''}</div>`:''}</td>
       <td style="max-width:220px;font-size:12.5px">${esc(sc.obs||'')}</td>
       <td style="white-space:nowrap">${S.canRecv&&['planned','arrived','onhold'].includes(st)?`<button class="btn sm ok" data-sact="start" title="Pornește recepția">▶</button> `:''}${S.canPlan?`<button class="btn sm" data-sact="edit" title="Editează">✎</button>`:''}</td>
     </tr>`}).join('');
@@ -1081,7 +1140,7 @@ function startFromSchedule(sc){
     e.preventDefault();let sup=$('#nSup').value;
     if(sup==='__new'){sup=$('#nSupNew').value.trim();if(!sup)return;if(!supOf(sup)){S.suppliers.push({name:sup,std:{unload:null,check:null,receipt:null,label:null,quality:null,rack:null},remarks:''});Store.saveSuppliers()}}
     if(!sup){$('#nSup').focus();return}
-    newReception({supplier:sup,plate:$('#nPlate').value.toUpperCase().trim(),operator:$('#nOp').value,pallets:null,scheduleId:sc.id,plannedPallets:sc.plannedPallets??null,transport:sc.transport||'',project:sc.project||''});
+    newReception({supplier:sup,plate:$('#nPlate').value.toUpperCase().trim(),operator:$('#nOp').value,pallets:null,scheduleId:sc.id,plannedSlot:sc.slot,plannedDay:sc.day,plannedPallets:sc.plannedPallets??null,transport:sc.transport||'',project:sc.project||''});
     if(!sc.arrivedAt)sc.arrivedAt=Date.now();logStatus(sc,'receiving');Store.saveSched(sc);
     closeModal();switchTab('active');
   });
@@ -1284,7 +1343,7 @@ function newReception(d){
   const now=Date.now(),sup=supOf(d.supplier);
   const rec={id:'r'+uid(),supplier:d.supplier,plate:d.plate,operator:d.operator,pallets:d.pallets,boxes:null,ref:'',note:'',problems:[],
     status:'active',startedAt:now,finishedAt:null,stdTotal:stdTotal(sup),segments:[],createdBy:S.me?.email||null,
-    scheduleId:d.scheduleId||null,plannedPallets:d.plannedPallets??null,transport:d.transport||'',project:d.project||''};
+    scheduleId:d.scheduleId||null,plannedSlot:d.plannedSlot??null,plannedDay:d.plannedDay||null,plannedPallets:d.plannedPallets??null,transport:d.transport||'',project:d.project||''};
   setStage(rec,(stagesFor(sup)[0]||STAGES[0]).k,now);
   Store.saveRec(rec);toast('Recepție pornită – '+d.supplier);
 }
@@ -1344,12 +1403,12 @@ $('#histBody').addEventListener('change',e=>{
 $('#btnExport').addEventListener('click',async()=>{
   const rows=filteredHistory(S.receptions.filter(r=>r.status==='done'));
   if(!rows.length){toast('Nimic de exportat pentru filtrele alese');return}
-  const H=['Zi operațională','Schimb','Data calendaristică','Ora start','Ora sfârșit','Slot programat','Urgent','Istoric status','Furnizor','Transportator','Proiect','Nr. auto','Operator','Nr. aviz / notă','Paleți programați','Paleți','Diferență paleți','Cutii','Durată totală (min)','Standard (min)','Diferență (min)',...STAGES.map(s=>s.n+' (min)'),'Probleme (pe etape)','Comentarii etape',...STAGE_TABS.map(s=>'Poze '+(s.k===GENERAL?'general':s.n)),'Poze total','Observații'];
+  const H=['Zi operațională','Schimb','Data calendaristică','Ora start','Ora sfârșit','Slot programat','Intrat în curte','Ieșit din curte','Urgent','Istoric status','Furnizor','Transportator','Proiect','Nr. auto','Operator','Nr. aviz / notă','Paleți programați','Paleți','Diferență paleți','Cutii','Durată totală (min)','Standard (min)','Diferență (min)',...STAGES.map(s=>s.n+' (min)'),'Probleme (pe etape)','Comentarii etape',...STAGE_TABS.map(s=>'Poze '+(s.k===GENERAL?'general':s.n)),'Poze total','Observații'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
   const lines=[H.map(q).join(';')];
   for(const r of rows){const tot=Math.round(totalMs(r)/60000);
     const sc=r.scheduleId?schedOf(r.scheduleId):null;
-    lines.push([fmtOpDate(r.startedAt),'S'+shiftOf(r.startedAt),fmtDate(r.startedAt),fmtTime(r.startedAt),fmtTime(r.finishedAt),sc?slotLabel(sc.slot):'',sc&&sc.urgent?'DA'+(sc.urgentRank?' #'+sc.urgentRank:'')+(sc.urgentReason?' – '+sc.urgentReason:''):'',statusTimeline(sc,r).map(e=>fmtTime(e.at)+' '+e.label+(e.note?' ('+e.note+')':'')).join(' → '),r.supplier,r.transport||'',r.project||'',r.plate,r.operator,r.ref,r.plannedPallets,r.pallets,r.plannedPallets!=null&&r.pallets!=null?r.pallets-r.plannedPallets:'',r.boxes,tot,r.stdTotal,r.stdTotal!=null?tot-r.stdTotal:'',
+    lines.push([fmtOpDate(r.startedAt),'S'+shiftOf(r.startedAt),fmtDate(r.startedAt),fmtTime(r.startedAt),fmtTime(r.finishedAt),slotOfRec(r)!=null?slotLabel(slotOfRec(r)):'',sc&&sc.gateIn?fmtTime(sc.gateIn):'',sc&&sc.gateOut?fmtTime(sc.gateOut):'',sc&&sc.urgent?'DA'+(sc.urgentRank?' #'+sc.urgentRank:'')+(sc.urgentReason?' – '+sc.urgentReason:''):'',statusTimeline(sc,r).map(e=>fmtTime(e.at)+' '+e.label+(e.note?' ('+e.note+')':'')).join(' → '),r.supplier,r.transport||'',r.project||'',r.plate,r.operator,r.ref,r.plannedPallets,r.pallets,r.plannedPallets!=null&&r.pallets!=null?r.pallets-r.plannedPallets:'',r.boxes,tot,r.stdTotal,r.stdTotal!=null?tot-r.stdTotal:'',
       ...STAGES.map(s=>Math.round(stageMs(r,s.k)/60000)),problemsSummary(r),notesSummary(r),...photoCounts(r),photoTotal(r),r.note].map(q).join(';'))}
   const csv='\uFEFF'+lines.join('\r\n');
   const name='receptii_'+opKey(Date.now())+'.csv';
@@ -1370,7 +1429,7 @@ $('#btnExportHtml').addEventListener('click',async()=>{
   h.push(`<h1>Raport recepții camioane</h1><p>${rows.length} recepții · generat ${fmtDate(Date.now())} ${fmtTime(Date.now())} de ${esc(S.me?.name||'')}${$('#fFrom').value||$('#fTo').value?' · perioada '+($('#fFrom').value||'…')+' → '+($('#fTo').value||'…'):''}</p>`);
   for(const r of rows){const tot=Math.round(totalMs(r)/60000);const ps=(photos[r.id]||[]).sort((a,b)=>a.at-b.at);
     h.push(`<h2>${esc(r.supplier)} · ${esc(r.plate||'—')} · ${fmtOpDate(r.startedAt)} S${shiftOf(r.startedAt)}</h2>`);
-    h.push(`<table><tr><th>Start</th><td>${fmtDate(r.startedAt)} ${fmtTime(r.startedAt)}</td><th>Sfârșit</th><td>${fmtDate(r.finishedAt)} ${fmtTime(r.finishedAt)}</td><th>Durată</th><td>${tot} min${r.stdTotal!=null?' (standard '+r.stdTotal+')':''}</td></tr><tr><th>Operator</th><td>${esc(r.operator||'—')}</td><th>Paleți</th><td>${r.pallets??'—'}${r.plannedPallets!=null?' / programat '+r.plannedPallets:''}</td><th>Cutii</th><td>${r.boxes??'—'}</td></tr>${r.note?`<tr><th>Observații</th><td colspan="5">${esc(r.note)}</td></tr>`:''}</table>`);
+    h.push(`<table><tr><th>Start</th><td>${fmtDate(r.startedAt)} ${fmtTime(r.startedAt)}</td><th>Sfârșit</th><td>${fmtDate(r.finishedAt)} ${fmtTime(r.finishedAt)}</td>${slotOfRec(r)!=null?`<th>Slot programat</th><td>${slotLabel(slotOfRec(r))}</td>`:''}<th>Durată</th><td>${tot} min${r.stdTotal!=null?' (standard '+r.stdTotal+')':''}</td></tr><tr><th>Operator</th><td>${esc(r.operator||'—')}</td><th>Paleți</th><td>${r.pallets??'—'}${r.plannedPallets!=null?' / programat '+r.plannedPallets:''}</td><th>Cutii</th><td>${r.boxes??'—'}</td></tr>${r.note?`<tr><th>Observații</th><td colspan="5">${esc(r.note)}</td></tr>`:''}</table>`);
     for(const s of STAGE_TABS){const pr=stageProblems(r,s.k),nt=stageNotes(r,s.k),pp=ps.filter(p=>p.stage===s.k);if(!pr.length&&!nt.length&&!pp.length)continue;
       h.push(`<div class="st">${esc(s.k===GENERAL?'General':s.n)}${s.k!==GENERAL?' · '+Math.round(stageMs(r,s.k)/60000)+' min':''}</div>`);
       if(pr.length)h.push(`<div>Probleme: <b>${esc(pr.join(', '))}</b></div>`);
@@ -1439,15 +1498,15 @@ $('#prList').addEventListener('click',e=>{const p=e.target.dataset.prdel;if(p!=n
 
 /* tabs */
 function switchTab(t){S.tab=t;document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t));
-  ['active','history','schedule','suppliers','settings'].forEach(k=>$('#tab-'+k).hidden=k!==t);if(t==='schedule'&&!S.schedDay)S.schedDay=opKey(Date.now());try{localStorage.setItem('rc_tab',t)}catch(e){}}
+  ['active','history','schedule','suppliers','settings','gate'].forEach(k=>$('#tab-'+k).hidden=k!==t);if(t==='schedule'&&!S.schedDay)S.schedDay=opKey(Date.now());try{localStorage.setItem('rc_tab',t)}catch(e){}}
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 
 /* ---------- modale ---------- */
 function openModal(html){const m=$('#modal');m.innerHTML=`<div class="box" role="dialog" aria-modal="true">${html}</div>`;m.hidden=false;m.scrollTop=0;document.documentElement.classList.add('modal-open');
   const f=m.querySelector('input,select');if(f)setTimeout(()=>f.focus(),30)}
 function closeModal(){$('#modal').hidden=true;$('#modal').innerHTML='';document.documentElement.classList.remove('modal-open')}
-$('#modal').addEventListener('click',e=>{if(e.target.id==='modal'||e.target.dataset.close!=null)closeModal()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#modal').hidden)closeModal()});
+$('#modal').addEventListener('click',e=>{if(e.target.closest('[data-close]'))closeModal()});
+/* fereastra se închide doar din ✕ / Renunță (nu la click în afara ei, nu la Escape) */
 
 $('#btnNew').addEventListener('click',()=>{
   if(!S.canRecv){toast('Doar depozitul poate porni recepții');return}
@@ -1512,7 +1571,7 @@ window.addEventListener('online',netState);window.addEventListener('offline',net
 (async()=>{
   if(CFG.appName){$('#appName').textContent=CFG.appName;$('#loginTitle').textContent=CFG.appName;document.title=CFG.appName}
   tickTimers();netState();
-  let t='active';try{t=localStorage.getItem('rc_tab')||'active'}catch(e){}
+  let t='active';try{t=localStorage.getItem('rc_tab')||'active'}catch(e){}if(t==='gate')t='active';
   switchTab(t);
   if(!configured()||typeof firebase==='undefined'){renderLogin();return}
   try{initFirebase()}catch(e){$('#loginBody').innerHTML='<div class="cfgwarn">Firebase nu a putut porni: '+esc(e.message)+'</div>';return}
