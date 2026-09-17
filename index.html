@@ -442,7 +442,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
         <h2>Catalog probleme</h2>
         <p>Problemele care pot fi bifate la o recepție (descărcare, verificare, etichetare, alocare la raft). Se pot adăuga oricând; la fiecare recepție există și un câmp de observații libere.</p>
         <div class="chips" id="prList" style="margin-bottom:10px"></div>
-        <details class="admin-only" style="margin-bottom:10px"><summary style="cursor:pointer;font-size:13px;color:var(--accent)">Probleme pe etape — la ce etapă apare fiecare problemă</summary><p style="font-size:12px">Nebifat pe niciun rând = problema apare la toate etapele (așa sunt acum toate). Bifează doar etapele unde are sens; se salvează automat.</p><div class="pstab" id="pstab"></div></details>
+        <details class="admin-only" style="margin-bottom:10px"><summary style="cursor:pointer;font-size:13px;color:var(--accent)">Probleme pe etape — la ce etapă apare fiecare problemă</summary><p style="font-size:12px">Bifează la ce etape apare fiecare problemă; se salvează automat. Pe o etapă apar <b>doar</b> problemele bifate pentru ea; problemele nebifate rămân disponibile la fila „General” a recepției. (Cât timp nu există nicio bifă, toate problemele apar la toate etapele.)</p><div class="pstab" id="pstab"></div></details>
         <div class="inl recv-only"><input id="prNew" placeholder="Problemă nouă"><button class="btn" id="prAdd">Adaugă</button></div>
       </div>
       <div class="sec">
@@ -471,7 +471,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '2.6.1';
+const APP_VERSION = '2.6.2';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -1185,7 +1185,10 @@ $('#schedBody').addEventListener('change',e=>{if(!e.target.matches('[data-sstatu
 const GENERAL='general';
 const STAGE_TABS=STAGES.concat([{k:GENERAL,n:'General'}]);
 function stageTabsFor(rec){return stagesFor(supOf(rec.supplier),rec).concat([{k:GENERAL,n:'General'}])}
-function problemsForStage(k){const m=S.problemStageMap||{};return S.problems.filter(p=>{const a=m[p];return !a||!a.length||k===GENERAL||a.includes(k)})}
+/* Probleme pe etapă: dacă nu s-a configurat nimic (nicio bifă), toate apar peste tot (comportamentul vechi).
+   Odată ce există bifele, pe o etapă apar DOAR problemele bifate pentru ea; cele nebifate rămân disponibile la „General”. */
+function stageMapConfigured(){const m=S.problemStageMap||{};return Object.keys(m).some(p=>m[p]&&m[p].length)}
+function problemsForStage(k){const m=S.problemStageMap||{};if(k===GENERAL||!stageMapConfigured())return S.problems.slice();return S.problems.filter(p=>(m[p]||[]).includes(k))}
 function stageProblems(rec,k){return k===GENERAL?(rec.problems||[]):((rec.stageProblems||{})[k]||[])}
 function stageNotes(rec,k){return ((rec.stageNotes||{})[k]||[])}
 function photosOf(recId,k){return (S.photos[recId]||[]).filter(p=>!k||p.stage===k).sort((a,b)=>a.at-b.at)}
@@ -1197,8 +1200,8 @@ function renderStagePanel(rec,mode){ // mode: 'card' | 'hist'
   const pref=mode==='card'?'':'e';
   const tabs=stageTabsFor(rec).map(s=>{const c=countsFor(rec,s.k);const badge=(c.p?`<i class="cb p">${c.p}</i>`:'')+(c.c?`<i class="cb c">${c.c}</i>`:'')+(c.f?`<i class="cb f">${c.f}</i>`:'');
     return `<button type="button" class="stab ${s.k===cur?'on':''} ${activeStage(rec)===s.k?'live':''}" data-stab="${s.k}">${esc(s.k===GENERAL?'General':s.n)}${badge}</button>`}).join('');
-  const probs=cur===GENERAL&&!(rec.problems||[]).length&&mode==='card'?'':`<div class="f"><label>Probleme la ${esc(cur===GENERAL?'recepție (general)':STAGE_BY[cur].n.toLowerCase())}</label>
-    <div class="chips">${problemsForStage(cur).map(p=>`<button type="button" class="chip ${stageProblems(rec,cur).includes(p)?'on':''}" data-sprob="${esc(p)}" ${can?'':'disabled'}>${esc(p)}</button>`).join('')||'<span class="muted" style="font-size:12px">Nicio problemă definită pentru această etapă (Setări → Catalog probleme).</span>'}</div></div>`;
+  const probs=`<div class="f"><label>Probleme la ${esc(cur===GENERAL?'recepție (general)':STAGE_BY[cur].n.toLowerCase())}</label>
+    <div class="chips">${problemsForStage(cur).map(p=>`<button type="button" class="chip ${stageProblems(rec,cur).includes(p)?'on':''}" data-sprob="${esc(p)}" ${can?'':'disabled'}>${esc(p)}</button>`).join('')||'<span class="muted" style="font-size:12px">Nicio problemă bifată pentru această etapă (Setări → Probleme pe etape). Restul problemelor sunt la fila „General”.</span>'}</div></div>`;
   const notes=stageNotes(rec,cur);
   const cmts=`<div class="f"><label>Comentarii</label>
     <div class="cmts">${notes.map((n,i)=>`<div class="cmt"><div class="ct">${esc(n.t)}</div><div class="cm">${esc(n.by)} · ${fmtDate(n.at)} ${fmtTime(n.at)}${can&&n.byEmail===S.me.email?` <button type="button" class="cdel" data-delcmt="${i}" title="Șterge comentariul">✕</button>`:''}</div></div>`).join('')||'<span class="muted" style="font-size:12px">Niciun comentariu.</span>'}</div>
