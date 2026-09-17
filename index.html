@@ -471,7 +471,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '2.6.0';
+const APP_VERSION = '2.6.1';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -1206,7 +1206,7 @@ function renderStagePanel(rec,mode){ // mode: 'card' | 'hist'
   const ph=photosOf(rec.id,cur);
   const photos=`<div class="f"><label>Poze ${ph.length?`(${ph.length})`:''}</label>
     <div class="pgrid">${ph.map(p=>`<button type="button" class="pth" data-photo="${p.id}" title="${esc(p.by)} · ${fmtTime(p.at)}"><img src="${p.thumb||p.data}" alt=""></button>`).join('')}
-    ${can?`<button type="button" class="padd" data-addphoto title="Adaugă poză">📷<span>Adaugă poză</span></button><input type="file" accept="image/*" capture="environment" multiple hidden data-photo-input>`:''}
+    ${can?`<button type="button" class="padd" data-addphoto="camera" title="Fă o poză cu camera">📷<span>Fă poză</span></button><button type="button" class="padd" data-addphoto="gallery" title="Alege poze existente din galerie / fișiere">🖼️<span>Din galerie</span></button><input type="file" accept="image/*" capture="environment" multiple hidden data-photo-input="camera"><input type="file" accept="image/*" multiple hidden data-photo-input="gallery">`:''}
     ${!ph.length&&!can?'<span class="muted" style="font-size:12px">Nicio poză.</span>':''}</div>
     ${S.uploading[rec.id]?`<div class="muted" style="font-size:12px;margin-top:4px">Se încarcă ${S.uploading[rec.id]} poză/poze…</div>`:''}</div>`;
   return `<div class="spanel" data-spanel="${rec.id}"><div class="stabs">${tabs}</div><div class="sbody">${probs}${cmts}${photos}</div></div>`;
@@ -1277,7 +1277,7 @@ function panelHandler(container,getRec){
       rec.stageNotes=rec.stageNotes||{};(rec.stageNotes[cur]=rec.stageNotes[cur]||[]).push({t,by:S.me.name,byEmail:S.me.email,at:Date.now()});inp.value='';Store.saveRec(rec);return}
     const dc=e.target.closest('[data-delcmt]');
     if(dc){const i=+dc.dataset.delcmt;const n=(rec.stageNotes?.[cur]||[])[i];if(n&&n.byEmail===S.me.email&&confirm('Ștergi comentariul?')){rec.stageNotes[cur].splice(i,1);Store.saveRec(rec)}return}
-    if(e.target.closest('[data-addphoto]')){panel.querySelector('[data-photo-input]').click();return}
+    const ap=e.target.closest('[data-addphoto]');if(ap){panel.querySelector(`[data-photo-input="${ap.dataset.addphoto}"]`).click();return}
   });
   container.addEventListener('change',e=>{
     if(!e.target.matches('[data-photo-input]'))return;
