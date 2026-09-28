@@ -471,7 +471,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '2.6.2';
+const APP_VERSION = '2.7.0';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -563,8 +563,14 @@ function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeou
 function supOf(name){return S.suppliers.find(s=>s.name===name)}
 function stdTotal(sup){if(!sup)return null;let t=0,any=false;for(const s of stagesFor(sup)){const v=sup.std?.[s.k];if(typeof v==='number'){t+=v;any=true}}return any?t:null}
 function stageMs(rec,k,now){let t=0;for(const seg of rec.segments||[]){if(seg.s!==k)continue;t+=(seg.b??now)-seg.a}return t}
-function activeStage(rec){const seg=(rec.segments||[]).slice(-1)[0];return seg&&seg.b==null?seg.s:null}
-function totalMs(rec,now){return (rec.finishedAt??now)-rec.startedAt}
+function activeStages(rec){return (rec.segments||[]).filter(sg=>sg.b==null).map(sg=>sg.s)}
+function activeStage(rec){const a=activeStages(rec);return a.length?a[0]:null}
+/* durata cât timp rulează cel puțin o etapă (etapele paralele se numără o singură dată) */
+function unionMs(segs,now){const a=(segs||[]).map(sg=>[sg.a,sg.b??now]).filter(x=>x[1]>x[0]).sort((x,y)=>x[0]-y[0]);let t=0,cs=null,ce=null;
+  for(const [x,y] of a){if(cs==null||x>ce){if(cs!=null)t+=ce-cs;cs=x;ce=y}else if(y>ce)ce=y}if(cs!=null)t+=ce-cs;return t}
+function wallMs(rec,now){return (rec.finishedAt??now)-rec.startedAt}
+/* recepțiile pornite cu timing 'active' (v2.7+) contorizează doar cât timp e activă o etapă; cele vechi rămân cu durata calendaristică */
+function totalMs(rec,now){return rec.timing==='active'?unionMs(rec.segments,now??Date.now()):wallMs(rec,now)}
 function ratioClass(actual,std){if(std==null||std===0)return 'na';const r=actual/std;return r<=1?'ok':r<=1.25?'warn':'bad'}
 const nameOf = em=>(S.operators.find(o=>o.email===em)||{}).name||em;
 const activeOps = ()=>S.operators.filter(o=>o.active!==false);
@@ -725,7 +731,7 @@ const Store = {
   async delRec(id){
     const rec=S.receptions.find(r=>r.id===id);if(!rec)return;
     rec.prevStatus=rec.status;rec.status='deleted';rec.deletedAt=Date.now();rec.deletedBy=S.me?.name||S.me?.email||'?';
-    if(rec.prevStatus==='active'){setStage(rec,null,rec.deletedAt);rec.finishedAt=rec.deletedAt}
+    if(rec.prevStatus==='active'){stopAllStages(rec,rec.deletedAt);rec.finishedAt=rec.deletedAt}
     if(rec.scheduleId){const sc=schedOf(rec.scheduleId);if(sc&&sc.status!=='cancelled'){logStatus(sc,sc.arrivedAt?'arrived':'planned','recepție anulată de '+(S.me?.name||'?'));Store.saveSched(sc)}}
     S.openRow=null;Store.saveRec(rec);toast('Recepție ștearsă (se poate restaura din Istoric → recepții șterse)');
   },
@@ -805,17 +811,17 @@ function renderActive(act){
   if(!act.length){el.innerHTML=`<div class="empty"><b>Niciun camion în lucru</b>${S.canRecv?'Pornește recepția din lista de camioane programate sau apasă „＋ Recepție neplanificată” — cronometrul pornește automat.':'Când depozitul pornește o recepție, apare aici în timp real.'}</div>`;return}
   const now=Date.now();
   el.innerHTML=act.map(r=>{
-    const sup=supOf(r.supplier),std=r.stdTotal??stdTotal(sup),cur=activeStage(r);
+    const sup=supOf(r.supplier),std=r.stdTotal??stdTotal(sup),act=activeStages(r),cur=act.length;
     const tot=totalMs(r,now);
     return `<article class="card" data-id="${r.id}">
       <div class="head">
         <div class="who"><h3>${esc(r.supplier)}</h3><div class="meta">Început ${fmtTime(r.startedAt)} · ${fmtDate(r.startedAt)}${r.operator?' · '+esc(r.operator):''}${slotOfRec(r)!=null?' · programat '+slotLabel(slotOfRec(r)):''}${r.transport?' · '+esc(r.transport):''}</div></div>
         <span class="plate">${esc(r.plate||'—')}</span>
-        <div class="timer ${ratioClass(tot/60000,std)}"><div class="t" data-timer-total>${fmtHMS(tot)}</div><div class="std">${std?'standard '+std+' min':'fără timp standard'}${cur?' · '+STAGE_BY[cur].n.toLowerCase():' · nicio etapă activă'}</div></div>
+        <div class="timer ${ratioClass(tot/60000,std)}"><div class="t" data-timer-total>${fmtHMS(tot)}</div><div class="std">${std?'standard '+std+' min':'fără timp standard'}<span data-timer-sub>${act.length?' · '+act.map(k=>STAGE_BY[k].n.toLowerCase()).join(' + '):' · nicio etapă activă — cronometrul stă'}</span></div></div>
       </div>
       <div class="body">
         <div class="rail" style="--cols:${stagesFor(sup,r).length}">${stagesFor(sup,r).map(s=>{
-          const ms=stageMs(r,s.k,now),stdv=sup?.std?.[s.k];const isA=cur===s.k,done=ms>0&&!isA;
+          const ms=stageMs(r,s.k,now),stdv=sup?.std?.[s.k];const isA=act.includes(s.k),done=ms>0&&!isA;
           const over=typeof stdv==='number'&&stdv>0&&ms/60000>stdv;
           return `<button class="stage ${isA?'active':''} ${done?'done':''} ${over?'over':''}" data-stage="${s.k}" title="${isA?'Oprește etapa':'Pornește etapa'}">
             <span class="sn">${esc(s.n)}</span><span class="st" data-timer-stage="${s.k}">${ms?fmtHMS(ms):'—'}</span>
@@ -831,7 +837,7 @@ function renderActive(act){
       </div>
       ${S.canRecv?`<div class="foot">
         <button class="btn ok" data-act="finish">✔ Terminare recepție</button>
-        ${cur?`<button class="btn" data-act="pause">⏸ Pauză (oprește etapa)</button>`:''}
+        ${cur?`<button class="btn" data-act="pause">⏸ Pauză (oprește toate etapele)</button>`:''}
         <span class="spacer"></span>
         ${S.isAdmin?`<button class="btn ghost sm" data-act="cancel">Anulează recepția</button>`:``}
       </div>`:`<div class="foot"><span class="muted" style="font-size:12.5px">Vizualizare în timp real — doar depozitul poate opera recepția.</span></div>`}
@@ -845,8 +851,7 @@ function tickTimers(){
     const tot=totalMs(r,now),std=r.stdTotal??stdTotal(supOf(r.supplier));
     card.querySelector('[data-timer-total]').textContent=fmtHMS(tot);
     const tm=card.querySelector('.timer');tm.className='timer '+ratioClass(tot/60000,std);
-    const cur=activeStage(r);
-    if(cur){const e=card.querySelector(`[data-timer-stage="${cur}"]`);if(e)e.textContent=fmtHMS(stageMs(r,cur,now))}
+    activeStages(r).forEach(k=>{const e=card.querySelector(`[data-timer-stage="${k}"]`);if(e)e.textContent=fmtHMS(stageMs(r,k,now))});
   });
   const d=new Date();$('#clock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
 }
@@ -1199,7 +1204,7 @@ function renderStagePanel(rec,mode){ // mode: 'card' | 'hist'
   const cur=uiStageOf(rec),can=S.canRecv&&rec.status!=='deleted';
   const pref=mode==='card'?'':'e';
   const tabs=stageTabsFor(rec).map(s=>{const c=countsFor(rec,s.k);const badge=(c.p?`<i class="cb p">${c.p}</i>`:'')+(c.c?`<i class="cb c">${c.c}</i>`:'')+(c.f?`<i class="cb f">${c.f}</i>`:'');
-    return `<button type="button" class="stab ${s.k===cur?'on':''} ${activeStage(rec)===s.k?'live':''}" data-stab="${s.k}">${esc(s.k===GENERAL?'General':s.n)}${badge}</button>`}).join('');
+    return `<button type="button" class="stab ${s.k===cur?'on':''} ${activeStages(rec).includes(s.k)?'live':''}" data-stab="${s.k}">${esc(s.k===GENERAL?'General':s.n)}${badge}</button>`}).join('');
   const probs=`<div class="f"><label>Probleme la ${esc(cur===GENERAL?'recepție (general)':STAGE_BY[cur].n.toLowerCase())}</label>
     <div class="chips">${problemsForStage(cur).map(p=>`<button type="button" class="chip ${stageProblems(rec,cur).includes(p)?'on':''}" data-sprob="${esc(p)}" ${can?'':'disabled'}>${esc(p)}</button>`).join('')||'<span class="muted" style="font-size:12px">Nicio problemă bifată pentru această etapă (Setări → Probleme pe etape). Restul problemelor sunt la fila „General”.</span>'}</div></div>`;
   const notes=stageNotes(rec,cur);
@@ -1316,12 +1321,9 @@ document.addEventListener('change',e=>{
 });
 
 /* ---------- acțiuni recepție ---------- */
-function setStage(rec,k,now){
-  rec.segments=rec.segments||[];
-  const last=rec.segments[rec.segments.length-1];
-  if(last&&last.b==null){last.b=now;if(last.s===k){return}}
-  if(k)rec.segments.push({s:k,a:now,b:null});
-}
+function startStage(rec,k,now){rec.segments=rec.segments||[];if(rec.segments.some(sg=>sg.s===k&&sg.b==null))return;rec.segments.push({s:k,a:now,b:null})}
+function stopStage(rec,k,now){(rec.segments||[]).forEach(sg=>{if(sg.s===k&&sg.b==null)sg.b=now})}
+function stopAllStages(rec,now){(rec.segments||[]).forEach(sg=>{if(sg.b==null)sg.b=now})}
 function confirmFinish(rec){
   const tot=totalMs(rec,Date.now()),std=rec.stdTotal??stdTotal(supOf(rec.supplier));
   const nProb=(rec.problems||[]).length+STAGES.reduce((a,s)=>a+(((rec.stageProblems||{})[s.k])||[]).length,0);
@@ -1336,7 +1338,7 @@ function confirmFinish(rec){
     <div class="bf"><button type="button" class="btn" data-close>Nu, mai lucrez</button><button type="button" class="btn ok" id="cfFinish">✔ Da, termină recepția</button></div>`);
   $('#cfFinish').addEventListener('click',()=>{
     const now=Date.now();const r=S.receptions.find(x=>x.id===rec.id);if(!r||r.status!=='active'){closeModal();return}
-    setStage(r,null,now);r.status='done';r.finishedAt=now;r.finishedBy=S.me?.email||null;Store.saveRec(r);toast('Recepție terminată: '+fmtMin(totalMs(r)));
+    stopAllStages(r,now);r.status='done';r.finishedAt=now;r.finishedBy=S.me?.email||null;Store.saveRec(r);toast('Recepție terminată: '+fmtMin(totalMs(r)));
     if(r.scheduleId){const sc=schedOf(r.scheduleId);if(sc&&sc.status!=='done'){logStatus(sc,'done');Store.saveSched(sc)}}
     closeModal();
   });
@@ -1345,9 +1347,9 @@ function confirmFinish(rec){
 function newReception(d){
   const now=Date.now(),sup=supOf(d.supplier);
   const rec={id:'r'+uid(),supplier:d.supplier,plate:d.plate,operator:d.operator,pallets:d.pallets,boxes:null,ref:'',note:'',problems:[],
-    status:'active',startedAt:now,finishedAt:null,stdTotal:stdTotal(sup),segments:[],createdBy:S.me?.email||null,
+    status:'active',startedAt:now,finishedAt:null,stdTotal:stdTotal(sup),segments:[],timing:'active',createdBy:S.me?.email||null,
     scheduleId:d.scheduleId||null,plannedSlot:d.plannedSlot??null,plannedDay:d.plannedDay||null,plannedPallets:d.plannedPallets??null,transport:d.transport||'',project:d.project||''};
-  setStage(rec,(stagesFor(sup)[0]||STAGES[0]).k,now);
+  startStage(rec,(stagesFor(sup)[0]||STAGES[0]).k,now);
   Store.saveRec(rec);toast('Recepție pornită – '+d.supplier);
 }
 
@@ -1357,11 +1359,11 @@ $('#activeList').addEventListener('click',e=>{
   const rec=S.receptions.find(r=>r.id===card.dataset.id);if(!rec)return;
   const now=Date.now();
   const st=e.target.closest('[data-stage]');
-  if(st){const k=st.dataset.stage;if(activeStage(rec)===k)setStage(rec,null,now);else{setStage(rec,k,now);S.uiStage[rec.id]=k}Store.saveRec(rec);return}
+  if(st){const k=st.dataset.stage;if(activeStages(rec).includes(k))stopStage(rec,k,now);else{startStage(rec,k,now);S.uiStage[rec.id]=k}Store.saveRec(rec);return}
   const pb=e.target.closest('[data-prob]');
   if(pb){const p=pb.dataset.prob;rec.problems=rec.problems||[];rec.problems=rec.problems.includes(p)?rec.problems.filter(x=>x!==p):rec.problems.concat([p]);Store.saveRec(rec);return}
   const act=e.target.closest('[data-act]')?.dataset.act;
-  if(act==='pause'){setStage(rec,null,now);Store.saveRec(rec)}
+  if(act==='pause'){stopAllStages(rec,now);Store.saveRec(rec)}
   if(act==='finish'){
     if(rec.pallets==null||rec.pallets===''){toast('Introdu numărul real de paleți descărcați înainte de a termina recepția');const i=card.querySelector('[data-field=pallets]');if(i){i.focus();i.style.outline='2px solid var(--bad)';setTimeout(()=>i.style.outline='',2500)}return}
     confirmFinish(rec);
@@ -1406,12 +1408,12 @@ $('#histBody').addEventListener('change',e=>{
 $('#btnExport').addEventListener('click',async()=>{
   const rows=filteredHistory(S.receptions.filter(r=>r.status==='done'));
   if(!rows.length){toast('Nimic de exportat pentru filtrele alese');return}
-  const H=['Zi operațională','Schimb','Data calendaristică','Ora start','Ora sfârșit','Slot programat','Intrat în curte','Ieșit din curte','Urgent','Istoric status','Furnizor','Transportator','Proiect','Nr. auto','Operator','Nr. aviz / notă','Paleți programați','Paleți','Diferență paleți','Cutii','Durată totală (min)','Standard (min)','Diferență (min)',...STAGES.map(s=>s.n+' (min)'),'Probleme (pe etape)','Comentarii etape',...STAGE_TABS.map(s=>'Poze '+(s.k===GENERAL?'general':s.n)),'Poze total','Observații'];
+  const H=['Zi operațională','Schimb','Data calendaristică','Ora start','Ora sfârșit','Slot programat','Intrat în curte','Ieșit din curte','Urgent','Istoric status','Furnizor','Transportator','Proiect','Nr. auto','Operator','Nr. aviz / notă','Paleți programați','Paleți','Diferență paleți','Cutii','Durată totală (min)','Durată calendaristică (min)','Standard (min)','Diferență (min)',...STAGES.map(s=>s.n+' (min)'),'Probleme (pe etape)','Comentarii etape',...STAGE_TABS.map(s=>'Poze '+(s.k===GENERAL?'general':s.n)),'Poze total','Observații'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
   const lines=[H.map(q).join(';')];
   for(const r of rows){const tot=Math.round(totalMs(r)/60000);
     const sc=r.scheduleId?schedOf(r.scheduleId):null;
-    lines.push([fmtOpDate(r.startedAt),'S'+shiftOf(r.startedAt),fmtDate(r.startedAt),fmtTime(r.startedAt),fmtTime(r.finishedAt),slotOfRec(r)!=null?slotLabel(slotOfRec(r)):'',sc&&sc.gateIn?fmtTime(sc.gateIn):'',sc&&sc.gateOut?fmtTime(sc.gateOut):'',sc&&sc.urgent?'DA'+(sc.urgentRank?' #'+sc.urgentRank:'')+(sc.urgentReason?' – '+sc.urgentReason:''):'',statusTimeline(sc,r).map(e=>fmtTime(e.at)+' '+e.label+(e.note?' ('+e.note+')':'')).join(' → '),r.supplier,r.transport||'',r.project||'',r.plate,r.operator,r.ref,r.plannedPallets,r.pallets,r.plannedPallets!=null&&r.pallets!=null?r.pallets-r.plannedPallets:'',r.boxes,tot,r.stdTotal,r.stdTotal!=null?tot-r.stdTotal:'',
+    lines.push([fmtOpDate(r.startedAt),'S'+shiftOf(r.startedAt),fmtDate(r.startedAt),fmtTime(r.startedAt),fmtTime(r.finishedAt),slotOfRec(r)!=null?slotLabel(slotOfRec(r)):'',sc&&sc.gateIn?fmtTime(sc.gateIn):'',sc&&sc.gateOut?fmtTime(sc.gateOut):'',sc&&sc.urgent?'DA'+(sc.urgentRank?' #'+sc.urgentRank:'')+(sc.urgentReason?' – '+sc.urgentReason:''):'',statusTimeline(sc,r).map(e=>fmtTime(e.at)+' '+e.label+(e.note?' ('+e.note+')':'')).join(' → '),r.supplier,r.transport||'',r.project||'',r.plate,r.operator,r.ref,r.plannedPallets,r.pallets,r.plannedPallets!=null&&r.pallets!=null?r.pallets-r.plannedPallets:'',r.boxes,tot,Math.round(wallMs(r)/60000),r.stdTotal,r.stdTotal!=null?tot-r.stdTotal:'',
       ...STAGES.map(s=>Math.round(stageMs(r,s.k)/60000)),problemsSummary(r),notesSummary(r),...photoCounts(r),photoTotal(r),r.note].map(q).join(';'))}
   const csv='\uFEFF'+lines.join('\r\n');
   const name='receptii_'+opKey(Date.now())+'.csv';
@@ -1432,7 +1434,7 @@ $('#btnExportHtml').addEventListener('click',async()=>{
   h.push(`<h1>Raport recepții camioane</h1><p>${rows.length} recepții · generat ${fmtDate(Date.now())} ${fmtTime(Date.now())} de ${esc(S.me?.name||'')}${$('#fFrom').value||$('#fTo').value?' · perioada '+($('#fFrom').value||'…')+' → '+($('#fTo').value||'…'):''}</p>`);
   for(const r of rows){const tot=Math.round(totalMs(r)/60000);const ps=(photos[r.id]||[]).sort((a,b)=>a.at-b.at);
     h.push(`<h2>${esc(r.supplier)} · ${esc(r.plate||'—')} · ${fmtOpDate(r.startedAt)} S${shiftOf(r.startedAt)}</h2>`);
-    h.push(`<table><tr><th>Start</th><td>${fmtDate(r.startedAt)} ${fmtTime(r.startedAt)}</td><th>Sfârșit</th><td>${fmtDate(r.finishedAt)} ${fmtTime(r.finishedAt)}</td>${slotOfRec(r)!=null?`<th>Slot programat</th><td>${slotLabel(slotOfRec(r))}</td>`:''}<th>Durată</th><td>${tot} min${r.stdTotal!=null?' (standard '+r.stdTotal+')':''}</td></tr><tr><th>Operator</th><td>${esc(r.operator||'—')}</td><th>Paleți</th><td>${r.pallets??'—'}${r.plannedPallets!=null?' / programat '+r.plannedPallets:''}</td><th>Cutii</th><td>${r.boxes??'—'}</td></tr>${r.note?`<tr><th>Observații</th><td colspan="5">${esc(r.note)}</td></tr>`:''}</table>`);
+    h.push(`<table><tr><th>Start</th><td>${fmtDate(r.startedAt)} ${fmtTime(r.startedAt)}</td><th>Sfârșit</th><td>${fmtDate(r.finishedAt)} ${fmtTime(r.finishedAt)}</td>${slotOfRec(r)!=null?`<th>Slot programat</th><td>${slotLabel(slotOfRec(r))}</td>`:''}<th>Durată</th><td>${tot} min${r.stdTotal!=null?' (standard '+r.stdTotal+')':''}${r.timing==='active'?' · calendaristic '+Math.round(wallMs(r)/60000)+' min':''}</td></tr><tr><th>Operator</th><td>${esc(r.operator||'—')}</td><th>Paleți</th><td>${r.pallets??'—'}${r.plannedPallets!=null?' / programat '+r.plannedPallets:''}</td><th>Cutii</th><td>${r.boxes??'—'}</td></tr>${r.note?`<tr><th>Observații</th><td colspan="5">${esc(r.note)}</td></tr>`:''}</table>`);
     for(const s of STAGE_TABS){const pr=stageProblems(r,s.k),nt=stageNotes(r,s.k),pp=ps.filter(p=>p.stage===s.k);if(!pr.length&&!nt.length&&!pp.length)continue;
       h.push(`<div class="st">${esc(s.k===GENERAL?'General':s.n)}${s.k!==GENERAL?' · '+Math.round(stageMs(r,s.k)/60000)+' min':''}</div>`);
       if(pr.length)h.push(`<div>Probleme: <b>${esc(pr.join(', '))}</b></div>`);
