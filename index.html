@@ -190,6 +190,9 @@ html.modal-open,html.modal-open body{overflow:hidden;overscroll-behavior:none}
 .modal .bh{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center}
 .modal .bh h2{font-size:18px;font-weight:600}
 .modal .bb{padding:18px 20px;display:grid;gap:14px}
+.stat .sub{font-size:11.5px;color:var(--muted);margin-top:2px}.stat.ok .v{color:var(--ok)}.stat.warn .v{color:var(--warn)}.stat.bad .v{color:var(--bad)}
+.kpt{width:100%;border-collapse:collapse;font-size:13px}.kpt th,.kpt td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}.kpt th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--surface2)}.kpt .num{text-align:right;font-variant-numeric:tabular-nums}.kpt tr.we td{color:var(--muted);background:var(--surface2)}.kpt tr.today td{font-weight:600}
+.kpc{width:100%;height:auto;display:block;font-family:var(--sans)}.kpc .bar{fill:var(--accent)}.kpc .bar.under{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1}.kpc .bar.we{fill:var(--line2)}.kpc .tgt{stroke:var(--ink);stroke-width:1.5;stroke-dasharray:5 4}.kpc .ax{stroke:var(--line)}.kpc text{fill:var(--muted);font-size:11px}.kpc .bar:hover{opacity:.8}
 .slottag{display:inline-block;margin-top:3px;font-size:11px;font-family:var(--mono);background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:8px}
 .modal .bf{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end}
 .stdgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
@@ -349,6 +352,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
     <button class="tab" role="tab" data-tab="active" aria-selected="true">În lucru<span class="n" id="nActive">0</span></button>
     <button class="tab" role="tab" data-tab="history" aria-selected="false">Istoric<span class="n" id="nDone">0</span></button>
     <button class="tab" role="tab" data-tab="schedule" aria-selected="false">Programări<span class="n" id="nSched">0</span></button>
+    <button class="tab" role="tab" data-tab="kpi" aria-selected="false">KPI</button>
     <button class="tab" role="tab" data-tab="suppliers" aria-selected="false">Furnizori</button>
     <button class="tab" role="tab" data-tab="settings" aria-selected="false">Setări</button>
     <button class="tab admin-only" role="tab" data-tab="gate" aria-selected="false">Poartă</button>
@@ -418,6 +422,13 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
       <div class="list" id="supList"></div>
     </section>
 
+    <section id="tab-kpi" hidden>
+      <div class="gbar"><button class="btn sm" id="kpPrev" title="Luna anterioară">‹</button><h2 style="margin:0" id="kpLabel"></h2><button class="btn sm" id="kpNext" title="Luna următoare">›</button><button class="btn sm" id="kpToday">Luna curentă</button><span class="spacer"></span><span class="muted" style="font-size:12.5px" id="kpInfo"></span></div>
+      <div class="stats" id="kpStats"></div>
+      <div class="card" style="padding:14px 16px;margin-bottom:14px"><div id="kpChart"></div></div>
+      <div class="tablewrap"><table class="kpt"><thead><tr><th>Zi</th><th class="num">Paleți</th><th class="num">Target</th><th class="num">% target</th><th class="num">Camioane</th><th class="num">Paleți / camion</th><th class="num">Durată medie</th><th class="num">În standard</th><th class="num">Cumulat</th></tr></thead><tbody id="kpBody"></tbody></table></div>
+      <p class="muted" style="font-size:12px;margin-top:10px">Paleții numărați ai recepțiilor finalizate, pe ziua operațională în care s-a terminat recepția. Target pe zi lucrătoare (luni–vineri); sâmbăta și duminica nu au target, dar paleții descărcați atunci se adună la lună. Recepțiile șterse nu se numără.</p>
+    </section>
     <section id="tab-settings" hidden>
       <div class="sec">
         <h2>Contul meu</h2>
@@ -435,6 +446,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
         <p>Rapoartele („azi”, filtrele din istoric, exportul) folosesc ziua operațională, nu cea calendaristică: începe la ora de mai jos și ține 24 de ore. Schimburile se numerotează S1, S2, S3 pornind de la aceeași oră.</p>
         <div class="inl"><label style="font-size:13px">Ziua începe la ora</label><select id="dayStart" style="min-width:90px;border:1px solid var(--line2);border-radius:6px;padding:7px 10px;background:var(--surface)"></select>
           <label style="font-size:13px">Durata unui schimb</label><select id="shiftHours" style="min-width:90px;border:1px solid var(--line2);border-radius:6px;padding:7px 10px;background:var(--surface)"><option value="8">8 ore</option><option value="12">12 ore</option></select>
+          <label style="font-size:13px">Target paleți / zi lucrătoare</label><input id="dailyTarget" type="number" min="1" inputmode="numeric" style="width:90px">
           <button class="btn admin-only" id="daySave">Salvează</button></div>
         <p class="muted" style="font-size:12px;margin-top:8px" id="dayInfo"></p>
       </div>
@@ -471,7 +483,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '2.8.0';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -538,7 +550,7 @@ const shiftDay = (k,n)=>dayKey(dayKeyToTs(k)+n*86400000);
 const fmtDayKey = k=>{const [y,m,d]=k.split('-');const dn=['Duminică','Luni','Marți','Miercuri','Joi','Vineri','Sâmbătă'][new Date(+y,+m-1,+d).getDay()];return dn+' '+d+'.'+m+'.'+y};
 
 /* ---------- stare ---------- */
-const S = { receptions:[], suppliers:[], problems:[], canRank:false, problemStageMap:{}, photos:{}, photoSubs:{}, photoCounts:{}, uiStage:{}, uploading:{}, operators:[], dayStart:7, shiftHours:8, schedules:[], schedExtra:[], schedDay:null, planners:[], isPlanner:false, role:'viewer', canRecv:false, canPlan:false, rolesMissing:false, admins:[], me:null, isAdmin:false, tab:'active', openRow:null, ready:false };
+const S = { kpiMonth:null, kpiExtra:{}, dailyTarget:515, receptions:[], suppliers:[], problems:[], canRank:false, problemStageMap:{}, photos:{}, photoSubs:{}, photoCounts:{}, uiStage:{}, uploading:{}, operators:[], dayStart:7, shiftHours:8, schedules:[], schedExtra:[], schedDay:null, planners:[], isPlanner:false, role:'viewer', canRecv:false, canPlan:false, rolesMissing:false, admins:[], me:null, isAdmin:false, tab:'active', openRow:null, ready:false };
 let fb=null, auth=null, fs=null, pendingRender=false, unsubs=[];
 
 /* ---------- utilitare ---------- */
@@ -705,7 +717,7 @@ function subscribe(){
     scheduleRender();
   }));
   unsubs.push(fs.doc('config/settings').onSnapshot(snap=>{
-    if(snap.exists){const d=snap.data();S.problems=d.problems||[];S.problemStageMap=Array.isArray(d.problemStages)?Object.fromEntries(d.problemStages.filter(x=>x&&x.p&&x.s&&x.s.length).map(x=>[x.p,x.s])):(d.problemStageMap||{});S.dayStart=typeof d.dayStart==='number'?d.dayStart:7;S.shiftHours=typeof d.shiftHours==='number'?d.shiftHours:8}
+    if(snap.exists){const d=snap.data();S.problems=d.problems||[];S.problemStageMap=Array.isArray(d.problemStages)?Object.fromEntries(d.problemStages.filter(x=>x&&x.p&&x.s&&x.s.length).map(x=>[x.p,x.s])):(d.problemStageMap||{});S.dayStart=typeof d.dayStart==='number'?d.dayStart:7;S.shiftHours=typeof d.shiftHours==='number'?d.shiftHours:8;S.dailyTarget=typeof d.dailyTarget==='number'&&d.dailyTarget>0?d.dailyTarget:515}
     else{S.problems=DEFAULT_PROBLEMS.slice();fs.doc('config/settings').set(settingsDoc()).catch(()=>{})}
     scheduleRender();
   }));
@@ -772,7 +784,7 @@ const Store = {
 };
 
 /* ---------- randare ---------- */
-function settingsDoc(){const m=S.problemStageMap||{};return {problems:S.problems,problemStages:Object.keys(m).filter(k=>m[k]&&m[k].length).map(k=>({p:k,s:m[k]})),dayStart:S.dayStart,shiftHours:S.shiftHours}}
+function settingsDoc(){const m=S.problemStageMap||{};return {problems:S.problems,problemStages:Object.keys(m).filter(k=>m[k]&&m[k].length).map(k=>({p:k,s:m[k]})),dayStart:S.dayStart,shiftHours:S.shiftHours,dailyTarget:S.dailyTarget}}
 function scheduleRender(){
   const a=document.activeElement;
   if(a&&a.closest('#activeList')&&a.matches('input,textarea,select')){pendingRender=true;return}
@@ -785,7 +797,7 @@ function render(){
   const act=S.receptions.filter(r=>r.status==='active');
   const done=S.receptions.filter(r=>r.status==='done');
   $('#nActive').textContent=act.length;$('#nDone').textContent=done.length;
-  renderStats(act,done);renderPlanned();renderActive(act);renderSchedule();renderHistory($('#fDel').checked?S.receptions.filter(r=>r.status==='deleted'):done);$('#nDel').textContent=S.receptions.filter(r=>r.status==='deleted').length;renderSuppliers();renderSettings();renderGate();
+  renderStats(act,done);renderPlanned();renderActive(act);renderSchedule();renderHistory($('#fDel').checked?S.receptions.filter(r=>r.status==='deleted'):done);$('#nDel').textContent=S.receptions.filter(r=>r.status==='deleted').length;renderSuppliers();renderSettings();renderGate();renderKpi();
 }
 
 function renderStats(act,done){
@@ -930,6 +942,7 @@ function renderSettings(){
   $('#prList').innerHTML=S.problems.map(p=>`<span class="tag">${esc(p)}${S.isAdmin?`<button data-prdel="${esc(p)}" title="Șterge">×</button>`:''}</span>`).join('');
   const ds=$('#dayStart');if(ds&&document.activeElement!==ds){ds.innerHTML=Array.from({length:24},(_,h)=>`<option value="${h}" ${h===S.dayStart?'selected':''}>${pad(h)}:00</option>`).join('')}
   const sh=$('#shiftHours');if(sh&&document.activeElement!==sh)sh.value=String(S.shiftHours);
+  const dt=$('#dailyTarget');if(dt&&document.activeElement!==dt){dt.value=S.dailyTarget;dt.disabled=!S.isAdmin}
   const sl=[];for(let i=0;i<Math.round(24/S.shiftHours);i++){const a=(S.dayStart+i*S.shiftHours)%24,b=(S.dayStart+(i+1)*S.shiftHours)%24;sl.push(`S${i+1}: ${pad(a)}:00–${pad(b)}:00`)}
   $('#dayInfo').textContent='Acum: ziua operațională '+fmtOpDate(Date.now())+' ('+opLabel()+'). Schimburi: '+sl.join(' · ');
   $('#verInfo').textContent='Versiune aplicație '+APP_VERSION+' · proiect Firebase: '+(CFG.firebase?.projectId||'—');
@@ -969,6 +982,79 @@ function setUrgentRank(sc,newRank){
   list.splice(newRank-1,0,sc);
   list.forEach((x,i)=>{if(x.urgentRank!==i+1){x.urgentRank=i+1;Store.saveSched(x)}});
 }
+
+/* ---------- KPI zilnic / lunar: paleți descărcați vs target ---------- */
+const MONTHS_RO=['ianuarie','februarie','martie','aprilie','mai','iunie','iulie','august','septembrie','octombrie','noiembrie','decembrie'];
+function monthKey(k){return k.slice(0,7)}
+function shiftMonth(mk,n){const [y,m]=mk.split('-').map(Number);const d=new Date(y,m-1+n,1);return d.getFullYear()+'-'+pad(d.getMonth()+1)}
+function monthDays(mk){const [y,m]=mk.split('-').map(Number);const n=new Date(y,m,0).getDate();return Array.from({length:n},(_,i)=>mk+'-'+pad(i+1))}
+function isWorkday(k){const d=new Date(dayKeyToTs(k)).getDay();return d>=1&&d<=5}
+/* recepțiile finalizate din luna cerută: din cele încărcate (ultimele 1500) sau, pentru luni mai vechi, dintr-o interogare separată, ținută în memorie */
+function kpiReceptions(mk){
+  const start=dayKeyToTs(mk+'-01')-12*3600000+S.dayStart*3600000;      // 00:00 ziua 1 + dayStart
+  const end=dayKeyToTs(shiftMonth(mk,1)+'-01')-12*3600000+S.dayStart*3600000;
+  const oldest=S.receptions.length?Math.min(...S.receptions.map(r=>r.startedAt)):Date.now();
+  if(S.receptions.length<1500||oldest<=start){return S.receptions.filter(r=>r.status==='done'&&r.finishedAt>=start&&r.finishedAt<end)}
+  if(S.kpiExtra[mk])return S.kpiExtra[mk];
+  if(S.kpiExtra['loading:'+mk])return [];
+  S.kpiExtra['loading:'+mk]=true;
+  fs.collection('receptions').where('finishedAt','>=',start).where('finishedAt','<',end).get()
+    .then(q=>{S.kpiExtra[mk]=q.docs.map(d=>d.data()).filter(r=>r.status==='done');delete S.kpiExtra['loading:'+mk];scheduleRender()})
+    .catch(e=>{delete S.kpiExtra['loading:'+mk];S.kpiExtra[mk]=[];toast('Nu am putut încărca luna: '+(e.code||e))});
+  return [];
+}
+function kpiCompute(mk){
+  const recs=kpiReceptions(mk),T=S.dailyTarget||515,today=opKey(Date.now()),curM=monthKey(today);
+  const days=monthDays(mk).map(k=>{const rs=recs.filter(r=>opKey(r.finishedAt)===k);
+    const pallets=rs.reduce((a,r)=>a+(+r.pallets||0),0),trucks=rs.length;
+    const withStd=rs.filter(r=>r.stdTotal!=null);const inStd=withStd.filter(r=>totalMs(r)/60000<=r.stdTotal).length;
+    const avg=trucks?rs.reduce((a,r)=>a+totalMs(r),0)/trucks:null;
+    const work=isWorkday(k);const past=mk<curM||k<=today;
+    return {k,pallets,trucks,avg,inStd,withStd:withStd.length,work,past,target:work?T:0,pct:work&&T?pallets/T:null}});
+  let cum=0;days.forEach(d=>{cum+=d.pallets;d.cum=cum});
+  const workAll=days.filter(d=>d.work).length,workElapsed=days.filter(d=>d.work&&d.past).length;
+  const total=days.reduce((a,d)=>a+d.pallets,0),trucks=days.reduce((a,d)=>a+d.trucks,0);
+  const targetMonth=T*workAll,targetToDate=T*workElapsed;
+  const over=days.filter(d=>d.work&&d.past&&d.pallets>=T).length,under=days.filter(d=>d.work&&d.past&&d.pallets<T).length;
+  const avgWork=workElapsed?total/workElapsed:0;const forecast=mk===curM&&workElapsed?Math.round(avgWork*workAll):null;
+  return {mk,T,days,workAll,workElapsed,total,trucks,targetMonth,targetToDate,over,under,avgWork,forecast,isCurrent:mk===curM};
+}
+function kpiChart(K){
+  const W=1000,H=260,padL=44,padR=12,padT=18,padB=30;const days=K.days;const n=days.length;
+  const maxV=Math.max(K.T*1.3,...days.map(d=>d.pallets))||1;const iw=(W-padL-padR)/n,bw=Math.max(4,iw-3);
+  const y=v=>padT+(H-padT-padB)*(1-v/maxV);
+  const ticks=[0,Math.round(maxV/2),Math.round(maxV)];
+  let g=`<svg class="kpc" viewBox="0 0 ${W} ${H}" role="img" aria-label="Paleți descărcați pe zile față de target">`;
+  g+=ticks.map(t=>`<line class="ax" x1="${padL}" x2="${W-padR}" y1="${y(t)}" y2="${y(t)}"/><text x="${padL-6}" y="${y(t)+4}" text-anchor="end">${t}</text>`).join('');
+  days.forEach((d,i)=>{const x=padL+i*iw+(iw-bw)/2;const h=Math.max(0,y(0)-y(d.pallets));
+    const cls='bar'+(d.work?(d.pallets<K.T&&d.past?' under':''):' we');
+    if(d.pallets>0||(d.work&&d.past))g+=`<rect class="${cls}" x="${x}" y="${y(d.pallets)}" width="${bw}" height="${h}" rx="3"><title>${fmtDayKey(d.k)}: ${d.pallets} paleți${d.work?' · target '+K.T+' ('+Math.round((d.pct||0)*100)+'%)':' · weekend'} · ${d.trucks} camioane</title></rect>`;
+    if(n<=31&&(i%2===0||n<=16))g+=`<text x="${x+bw/2}" y="${H-padB+14}" text-anchor="middle">${d.k.slice(8)}</text>`});
+  g+=`<line class="tgt" x1="${padL}" x2="${W-padR}" y1="${y(K.T)}" y2="${y(K.T)}"/><text x="${W-padR}" y="${y(K.T)-5}" text-anchor="end">target ${K.T} / zi</text>`;
+  return g+'</svg>';
+}
+function renderKpi(){
+  const el=$('#kpBody');if(!el||$('#tab-kpi').hidden)return;
+  if(!S.kpiMonth)S.kpiMonth=monthKey(opKey(Date.now()));
+  const K=kpiCompute(S.kpiMonth);const [y,m]=K.mk.split('-');
+  $('#kpLabel').textContent=MONTHS_RO[+m-1]+' '+y;$('#kpNext').disabled=K.mk>=monthKey(opKey(Date.now()));
+  $('#kpInfo').textContent=S.kpiExtra['loading:'+K.mk]?'se încarcă…':`${K.workAll} zile lucrătoare${K.isCurrent?' · '+K.workElapsed+' trecute':''} · target ${K.T} paleți / zi`;
+  const pct=K.targetToDate?Math.round(K.total/K.targetToDate*100):null;
+  const cls=pct==null?'':pct>=100?'ok':pct>=90?'warn':'bad';
+  const stat=(l,v,sub,c)=>`<div class="stat ${c||''}"><div class="l">${l}</div><div class="v">${v}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`;
+  $('#kpStats').innerHTML=stat('Paleți descărcați',K.total.toLocaleString('ro-RO'),K.trucks+' camioane')+
+    stat(K.isCurrent?'Target la zi':'Target lună',K.targetToDate.toLocaleString('ro-RO'),K.isCurrent?K.T+' × '+K.workElapsed+' zile':K.T+' × '+K.workAll+' zile')+
+    stat('Realizat vs target',pct==null?'—':pct+' %',pct==null?'':(K.total-K.targetToDate>=0?'+':'')+(K.total-K.targetToDate).toLocaleString('ro-RO')+' paleți',cls)+
+    stat('Zile peste / sub target',K.over+' / '+K.under,'medie '+Math.round(K.avgWork)+' paleți / zi lucrătoare')+
+    (K.isCurrent?stat('Estimare final de lună',K.forecast!=null?K.forecast.toLocaleString('ro-RO'):'—','target lună '+K.targetMonth.toLocaleString('ro-RO'),K.forecast!=null?(K.forecast>=K.targetMonth?'ok':'warn'):''):stat('Target lună',K.targetMonth.toLocaleString('ro-RO'),K.T+' × '+K.workAll+' zile'));
+  $('#kpChart').innerHTML=kpiChart(K);
+  const today=opKey(Date.now());
+  el.innerHTML=K.days.filter(d=>d.past||d.pallets>0).map(d=>{const p=d.pct==null?null:Math.round(d.pct*100);const pc=p==null?'':p>=100?'ok':p>=90?'warn':'bad';
+    return `<tr class="${d.work?'':'we'} ${d.k===today?'today':''}"><td>${fmtDayKey(d.k)}${d.work?'':' <span class="muted" style="font-size:11px">weekend</span>'}</td><td class="num"><b>${d.pallets}</b></td><td class="num">${d.work?d.target:'—'}</td><td class="num">${p==null?'—':`<span class="pill ${pc}">${p} %</span>`}</td><td class="num">${d.trucks}</td><td class="num">${d.trucks?Math.round(d.pallets/d.trucks):'—'}</td><td class="num">${d.avg!=null?fmtMin(d.avg):'—'}</td><td class="num">${d.withStd?Math.round(d.inStd/d.withStd*100)+' %':'—'}</td><td class="num">${d.cum}</td></tr>`}).join('')||'<tr><td colspan="9" class="muted" style="text-align:center;padding:24px">Nicio recepție finalizată în această lună.</td></tr>';
+}
+$('#kpPrev').addEventListener('click',()=>{S.kpiMonth=shiftMonth(S.kpiMonth||monthKey(opKey(Date.now())),-1);renderKpi()});
+$('#kpNext').addEventListener('click',()=>{S.kpiMonth=shiftMonth(S.kpiMonth||monthKey(opKey(Date.now())),1);renderKpi()});
+$('#kpToday').addEventListener('click',()=>{S.kpiMonth=monthKey(opKey(Date.now()));renderKpi()});
 
 /* ---------- poartă (portar): intrat / ieșit din curte ---------- */
 function gateState(sc){return sc.gateOut?'out':(sc.gateIn?'in':'')}
@@ -1494,7 +1580,7 @@ $('#myPinBtn').addEventListener('click',async()=>{
 $('#btnLogout').addEventListener('click',()=>{if(confirm('Ieși din cont pe acest dispozitiv?'))auth.signOut()});
 
 /* setări: zi operațională */
-$('#daySave').addEventListener('click',()=>{if(!S.isAdmin){toast('Doar administratorul');return}S.dayStart=+$('#dayStart').value;S.shiftHours=+$('#shiftHours').value;Store.saveSettings();toast('Salvat: ziua începe la '+pad(S.dayStart)+':00')});
+$('#daySave').addEventListener('click',()=>{if(!S.isAdmin){toast('Doar administratorul');return}S.dayStart=+$('#dayStart').value;S.shiftHours=+$('#shiftHours').value;const dt=+$('#dailyTarget').value;if(dt>0)S.dailyTarget=dt;Store.saveSettings();toast('Salvat: ziua începe la '+pad(S.dayStart)+':00')});
 
 /* setări: probleme */
 $('#prAdd').addEventListener('click',()=>{if(!S.canRecv){toast('Doar depozitul sau administratorul');return}const v=$('#prNew').value.trim();if(!v)return;if(!S.problems.includes(v))S.problems.push(v);$('#prNew').value='';Store.saveSettings()});
@@ -1503,7 +1589,7 @@ $('#prList').addEventListener('click',e=>{const p=e.target.dataset.prdel;if(p!=n
 
 /* tabs */
 function switchTab(t){S.tab=t;document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t));
-  ['active','history','schedule','suppliers','settings','gate'].forEach(k=>$('#tab-'+k).hidden=k!==t);if(t==='schedule'&&!S.schedDay)S.schedDay=opKey(Date.now());try{localStorage.setItem('rc_tab',t)}catch(e){}}
+  ['active','history','schedule','suppliers','settings','gate','kpi'].forEach(k=>$('#tab-'+k).hidden=k!==t);if(t==='schedule'&&!S.schedDay)S.schedDay=opKey(Date.now());if(t==='kpi')setTimeout(renderKpi,0);try{localStorage.setItem('rc_tab',t)}catch(e){}}
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 
 /* ---------- modale ---------- */
