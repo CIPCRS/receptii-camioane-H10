@@ -483,7 +483,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '2.8.1';
+const APP_VERSION = '2.8.2';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -1022,11 +1022,11 @@ function kpiCompute(mk){
 }
 function kpiChart(K){
   const W=1000,H=260,padL=44,padR=12,padT=18,padB=30;const days=K.days;const n=days.length;
-  const maxV=Math.max(K.T*1.3,...days.map(d=>d.pallets))||1;const iw=(W-padL-padR)/n,bw=Math.max(4,iw-3);
+  const rawMax=Math.max(K.T*1.3,...days.map(d=>d.pallets))||1;const step=rawMax>1500?500:rawMax>600?250:100;const maxV=Math.ceil(rawMax/step)*step;const iw=(W-padL-padR)/n,bw=Math.max(4,iw-3);
   const y=v=>padT+(H-padT-padB)*(1-v/maxV);
-  const ticks=[0,Math.round(maxV/2),Math.round(maxV)];
+  const ticks=[];for(let t=0;t<=maxV;t+=step){if(Math.abs(t-K.T)/maxV>0.07)ticks.push(t)}ticks.push(K.T);
   let g=`<svg class="kpc" viewBox="0 0 ${W} ${H}" role="img" aria-label="Paleți descărcați pe zile față de target">`;
-  g+=ticks.map(t=>`<line class="ax" x1="${padL}" x2="${W-padR}" y1="${y(t)}" y2="${y(t)}"/><text x="${padL-6}" y="${y(t)+4}" text-anchor="end">${t}</text>`).join('');
+  g+=ticks.map(t=>t===K.T?`<text x="${padL-6}" y="${y(t)+4}" text-anchor="end" style="fill:var(--ink);font-weight:600">${t}</text>`:`<line class="ax" x1="${padL}" x2="${W-padR}" y1="${y(t)}" y2="${y(t)}"/><text x="${padL-6}" y="${y(t)+4}" text-anchor="end">${t}</text>`).join('');
   days.forEach((d,i)=>{const x=padL+i*iw+(iw-bw)/2;const h=Math.max(0,y(0)-y(d.pallets));
     const cls='bar'+(d.work?(d.pallets<K.T&&d.past?' under':''):' we');
     if(d.pallets>0||(d.work&&d.past))g+=`<rect class="${cls}" x="${x}" y="${y(d.pallets)}" width="${bw}" height="${h}" rx="3"><title>${fmtDayKey(d.k)}: ${d.pallets} paleți${d.work?' · target '+K.T+' ('+Math.round((d.pct||0)*100)+'%)':' · weekend'} · ${d.trucks} camioane</title></rect>`;
