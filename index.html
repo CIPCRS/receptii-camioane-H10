@@ -427,7 +427,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
       <div class="stats" id="kpStats"></div>
       <div class="card" style="padding:14px 16px;margin-bottom:14px"><div id="kpChart"></div></div>
       <div class="tablewrap"><table class="kpt"><thead><tr><th>Zi</th><th class="num">Paleți</th><th class="num">Target</th><th class="num">% target</th><th class="num">Camioane</th><th class="num">Paleți / camion</th><th class="num">Durată medie</th><th class="num">În standard</th><th class="num">Cumulat</th></tr></thead><tbody id="kpBody"></tbody></table></div>
-      <p class="muted" style="font-size:12px;margin-top:10px">Paleții numărați ai recepțiilor finalizate, pe ziua operațională în care s-a terminat recepția. Target pe zi lucrătoare (luni–vineri); sâmbăta și duminica nu au target, dar paleții descărcați atunci se adună la lună. Recepțiile șterse nu se numără.</p>
+      <p class="muted" style="font-size:12px;margin-top:10px">Paleții numărați ai recepțiilor finalizate, pe ziua operațională în care s-a terminat recepția; ziua operațională curentă nu se contorizează — apare după ce se încheie (la ora de început a zilei următoare). Target pe zi lucrătoare (luni–vineri); sâmbăta și duminica nu au target, dar paleții descărcați atunci se adună la lună. Recepțiile șterse nu se numără.</p>
     </section>
     <section id="tab-settings" hidden>
       <div class="sec">
@@ -483,7 +483,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '2.8.0';
+const APP_VERSION = '2.8.1';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -1004,12 +1004,13 @@ function kpiReceptions(mk){
   return [];
 }
 function kpiCompute(mk){
-  const recs=kpiReceptions(mk),T=S.dailyTarget||515,today=opKey(Date.now()),curM=monthKey(today);
+  const T=S.dailyTarget||515,today=opKey(Date.now()),curM=monthKey(today);
+  const recs=kpiReceptions(mk).filter(r=>opKey(r.finishedAt)<today);   // doar zile încheiate: ziua operațională curentă nu se contorizează
   const days=monthDays(mk).map(k=>{const rs=recs.filter(r=>opKey(r.finishedAt)===k);
     const pallets=rs.reduce((a,r)=>a+(+r.pallets||0),0),trucks=rs.length;
     const withStd=rs.filter(r=>r.stdTotal!=null);const inStd=withStd.filter(r=>totalMs(r)/60000<=r.stdTotal).length;
     const avg=trucks?rs.reduce((a,r)=>a+totalMs(r),0)/trucks:null;
-    const work=isWorkday(k);const past=mk<curM||k<=today;
+    const work=isWorkday(k);const past=k<today;
     return {k,pallets,trucks,avg,inStd,withStd:withStd.length,work,past,target:work?T:0,pct:work&&T?pallets/T:null}});
   let cum=0;days.forEach(d=>{cum+=d.pallets;d.cum=cum});
   const workAll=days.filter(d=>d.work).length,workElapsed=days.filter(d=>d.work&&d.past).length;
@@ -1038,7 +1039,7 @@ function renderKpi(){
   if(!S.kpiMonth)S.kpiMonth=monthKey(opKey(Date.now()));
   const K=kpiCompute(S.kpiMonth);const [y,m]=K.mk.split('-');
   $('#kpLabel').textContent=MONTHS_RO[+m-1]+' '+y;$('#kpNext').disabled=K.mk>=monthKey(opKey(Date.now()));
-  $('#kpInfo').textContent=S.kpiExtra['loading:'+K.mk]?'se încarcă…':`${K.workAll} zile lucrătoare${K.isCurrent?' · '+K.workElapsed+' trecute':''} · target ${K.T} paleți / zi`;
+  $('#kpInfo').textContent=S.kpiExtra['loading:'+K.mk]?'se încarcă…':`${K.workAll} zile lucrătoare${K.isCurrent?' · '+K.workElapsed+' încheiate (ziua curentă nu se contorizează)':''} · target ${K.T} paleți / zi`;
   const pct=K.targetToDate?Math.round(K.total/K.targetToDate*100):null;
   const cls=pct==null?'':pct>=100?'ok':pct>=90?'warn':'bad';
   const stat=(l,v,sub,c)=>`<div class="stat ${c||''}"><div class="l">${l}</div><div class="v">${v}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`;
