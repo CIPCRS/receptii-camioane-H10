@@ -385,7 +385,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
           <thead><tr>
             <th>Zi operațională</th><th>Furnizor</th><th>Nr. auto</th><th>Operator</th>
             <th class="num">Paleți</th><th class="num">Cutii</th>
-            <th class="num">Durată</th><th class="num">Standard</th><th>Diferență</th><th>Probleme</th>
+            <th class="num">Durată</th><th class="num">Standard</th><th>Diferență</th><th>Probleme</th><th>Documente</th>
           </tr></thead>
           <tbody id="histBody"></tbody>
         </table>
@@ -497,7 +497,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.0.4';
+const APP_VERSION = '3.0.5';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -907,7 +907,7 @@ function renderHistory(done){
   sel.innerHTML='<option value="">Toți</option>'+S.suppliers.slice().sort((a,b)=>a.name.localeCompare(b.name,'ro')).map(s=>`<option ${s.name===cur?'selected':''}>${esc(s.name)}</option>`).join('');
   const rows=filteredHistory(done);
   const tb=$('#histBody');
-  if(!rows.length){tb.innerHTML=`<tr><td colspan="10" class="muted" style="text-align:center;padding:30px">${$('#fDel').checked?'Nicio recepție ștearsă':'Nicio recepție finalizată'}${done.length?' pentru filtrele alese':''}.</td></tr>`;return}
+  if(!rows.length){tb.innerHTML=`<tr><td colspan="11" class="muted" style="text-align:center;padding:30px">${$('#fDel').checked?'Nicio recepție ștearsă':'Nicio recepție finalizată'}${done.length?' pentru filtrele alese':''}.</td></tr>`;return}
   tb.innerHTML=rows.map(r=>{
     const tot=totalMs(r),min=Math.round(tot/60000),std=r.stdTotal,diff=std!=null?min-std:null,cls=ratioClass(min,std);
     const open=S.openRow===r.id;
@@ -920,7 +920,8 @@ function renderHistory(done){
       <td class="num">${r.pallets??'—'}${r.mixedPallets?`<div class="muted" style="font-size:11px">mixați ${r.mixedPallets}</div>`:''}${r.plannedPallets!=null?`<div class="muted" style="font-size:11px">prog. ${r.plannedPallets}${r.pallets!=null&&r.pallets!==r.plannedPallets?` <span style="color:var(--bad)">(${r.pallets-r.plannedPallets>0?'+':''}${r.pallets-r.plannedPallets})</span>`:''}</div>`:''}</td><td class="num">${r.boxes??'—'}</td>
       <td class="num">${fmtMin(tot)}</td><td class="num muted">${std!=null?std+' min':'—'}</td>
       <td>${diff==null?'<span class="pill na">n/a</span>':`<span class="pill ${cls}">${diff>0?'+':''}${diff} min</span>`}</td>
-      <td><div class="probs">${renameProblems(r.problems).map(p=>`<span>${esc(p)}</span>`).join('')}${STAGES.flatMap(s=>renameProblems((r.stageProblems||{})[s.k]||[]).map(p=>`<span title="${esc(s.n)}">${esc(s.n.split(' ')[0])}: ${esc(p)}</span>`)).join('')}${photoTotal(r)?`<span style="background:var(--ok-soft)">📷 ${photoTotal(r)}</span>`:''}${r.docCount?`<span style="background:var(--accent-soft)">📄 ${r.docCount}</span>`:''}${r.note?`<span class="muted" style="background:none;padding:0">${esc(r.note)}</span>`:''}</div></td>
+      <td><div class="probs">${renameProblems(r.problems).map(p=>`<span>${esc(p)}</span>`).join('')}${STAGES.flatMap(s=>renameProblems((r.stageProblems||{})[s.k]||[]).map(p=>`<span title="${esc(s.n)}">${esc(s.n.split(' ')[0])}: ${esc(p)}</span>`)).join('')}${photoTotal(r)?`<span style="background:var(--ok-soft)">📷 ${photoTotal(r)}</span>`:''}${r.note?`<span class="muted" style="background:none;padding:0">${esc(r.note)}</span>`:''}</div></td>
+      <td style="text-align:right;white-space:nowrap">${r.docCount?`<span class="pill ok">📄 ${r.docCount}</span>`:(del?'':'<span class="pill bad" title="Niciun document scanat atașat">Lipsă documente</span>')}</td>
     </tr>${open?renderDetail(r):''}`}).join('');
 }
 
@@ -929,7 +930,7 @@ function renderDetail(r){
   const rows=stagesFor(sup,r).map(s=>{const ms=stageMs(r,s.k,now),m=ms/60000,stdv=sup?.std?.[s.k];
     const pct=typeof stdv==='number'&&stdv>0?Math.min(100,m/stdv*100):(ms?100:0);
     return `<span>${esc(s.n)}</span><span class="b"><i class="${typeof stdv==='number'&&m>stdv?'over':''}" style="width:${pct}%"></i></span><span class="mono">${ms?fmtMin(ms):'—'}</span><span class="mono muted">${typeof stdv==='number'?'std '+stdv:'—'}</span>`}).join('');
-  return `<tr class="detail" data-detail="${r.id}"><td colspan="10">
+  return `<tr class="detail" data-detail="${r.id}"><td colspan="11">
     <div class="grid">
       <div><div class="f"><label>Timp pe etape</label></div><div class="stagelist">${rows}</div></div>
       <div style="display:grid;gap:10px">
