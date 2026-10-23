@@ -193,6 +193,7 @@ html.modal-open,html.modal-open body{overflow:hidden;overscroll-behavior:none}
 .stat .sub{font-size:11.5px;color:var(--muted);margin-top:2px}.stat.ok .v{color:var(--ok)}.stat.warn .v{color:var(--warn)}.stat.bad .v{color:var(--bad)}
 .kpt{width:100%;border-collapse:collapse;font-size:13px}.kpt th,.kpt td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}.kpt th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--surface2)}.kpt .num{text-align:right;font-variant-numeric:tabular-nums}.kpt tr.we td{color:var(--muted);background:var(--surface2)}.kpt tr.today td{font-weight:600}
 .kpc{width:100%;height:auto;display:block;font-family:var(--sans)}.kpc .bar{fill:var(--accent)}.kpc .bar.under{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1}.kpc .bar.we{fill:var(--line2)}.kpc .tgt{stroke:var(--ink);stroke-width:1.5;stroke-dasharray:5 4}.kpc .ax{stroke:var(--line)}.kpc text{fill:var(--muted);font-size:11px}.kpc .bar:hover{opacity:.8}
+.dlist{display:grid;gap:6px}.ditem{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--surface2);border-radius:8px;padding:8px 10px;font-size:13px}.ditem .dn{font-weight:600}.ditem .dm{color:var(--muted);font-size:12px}.dtype{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600}
 .slottag{display:inline-block;margin-top:3px;font-size:11px;font-family:var(--mono);background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:8px}
 .modal .bf{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end}
 .stdgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
@@ -353,6 +354,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
     <button class="tab" role="tab" data-tab="history" aria-selected="false">Istoric<span class="n" id="nDone">0</span></button>
     <button class="tab" role="tab" data-tab="schedule" aria-selected="false">Programări<span class="n" id="nSched">0</span></button>
     <button class="tab" role="tab" data-tab="kpi" aria-selected="false">KPI</button>
+    <button class="tab" role="tab" data-tab="docs" aria-selected="false">Documente</button>
     <button class="tab" role="tab" data-tab="suppliers" aria-selected="false">Furnizori</button>
     <button class="tab" role="tab" data-tab="settings" aria-selected="false">Setări</button>
     <button class="tab admin-only" role="tab" data-tab="gate" aria-selected="false">Poartă</button>
@@ -422,6 +424,17 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
       <div class="list" id="supList"></div>
     </section>
 
+    <section id="tab-docs" hidden>
+      <div class="toolbar">
+        <div class="f"><label>Nr. auto / furnizor / fișier</label><input id="dQ" placeholder="ex. AG 44 MLG sau Bader"></div>
+        <div class="f"><label>De la (zi operațională)</label><input type="date" id="dFrom"></div>
+        <div class="f"><label>Până la</label><input type="date" id="dTo"></div>
+        <div class="f"><label>Tip document</label><select id="dType"><option value="">Toate</option></select></div>
+      </div>
+      <p class="muted" style="font-size:12.5px;margin:0 0 10px" id="dInfo"></p>
+      <div class="tablewrap"><table class="kpt"><thead><tr><th>Zi</th><th>Furnizor</th><th>Nr. auto</th><th>Tip</th><th>Fișier</th><th class="num">Mărime</th><th>Încărcat de</th><th></th></tr></thead><tbody id="dBody"></tbody></table></div>
+      <p class="muted" style="font-size:12px;margin-top:10px">Documentele scanate (CMR, aviz, packing list…) se atașează de depozit pe recepția camionului, din Istoric, după terminarea recepției. Fișierele stau în spațiul de stocare al aplicației; „Deschide” le descarcă pe orice dispozitiv.</p>
+    </section>
     <section id="tab-kpi" hidden>
       <div class="gbar"><button class="btn sm" id="kpPrev" title="Luna anterioară">‹</button><h2 style="margin:0" id="kpLabel"></h2><button class="btn sm" id="kpNext" title="Luna următoare">›</button><button class="btn sm" id="kpToday">Luna curentă</button><span class="spacer"></span><span class="muted" style="font-size:12.5px" id="kpInfo"></span></div>
       <div class="stats" id="kpStats"></div>
@@ -478,12 +491,13 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
 <script src="config.js"></script>
 <script>
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '2.9.0';
+const APP_VERSION = '3.0.0';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -550,8 +564,8 @@ const shiftDay = (k,n)=>dayKey(dayKeyToTs(k)+n*86400000);
 const fmtDayKey = k=>{const [y,m,d]=k.split('-');const dn=['Duminică','Luni','Marți','Miercuri','Joi','Vineri','Sâmbătă'][new Date(+y,+m-1,+d).getDay()];return dn+' '+d+'.'+m+'.'+y};
 
 /* ---------- stare ---------- */
-const S = { kpiMonth:null, kpiExtra:{}, dailyTarget:515, receptions:[], suppliers:[], problems:[], canRank:false, problemStageMap:{}, photos:{}, photoSubs:{}, photoCounts:{}, uiStage:{}, uploading:{}, operators:[], dayStart:7, shiftHours:8, schedules:[], schedExtra:[], schedDay:null, planners:[], isPlanner:false, role:'viewer', canRecv:false, canPlan:false, rolesMissing:false, admins:[], me:null, isAdmin:false, tab:'active', openRow:null, ready:false };
-let fb=null, auth=null, fs=null, pendingRender=false, unsubs=[];
+const S = { docs:{}, docSubs:{}, docList:[], docListUnsub:null, docUploading:{}, kpiMonth:null, kpiExtra:{}, dailyTarget:515, receptions:[], suppliers:[], problems:[], canRank:false, problemStageMap:{}, photos:{}, photoSubs:{}, photoCounts:{}, uiStage:{}, uploading:{}, operators:[], dayStart:7, shiftHours:8, schedules:[], schedExtra:[], schedDay:null, planners:[], isPlanner:false, role:'viewer', canRecv:false, canPlan:false, rolesMissing:false, admins:[], me:null, isAdmin:false, tab:'active', openRow:null, ready:false };
+let fb=null, auth=null, fs=null, st=null, pendingRender=false, unsubs=[];
 
 /* ---------- utilitare ---------- */
 const $ = s=>document.querySelector(s);
@@ -606,6 +620,7 @@ function initFirebase(){
   fb=firebase.initializeApp(CFG.firebase);
   auth=firebase.auth();
   fs=firebase.firestore();
+  try{st=firebase.storage()}catch(e){console.warn('storage',e)}
   try{fs.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){}
   auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
 }
@@ -703,7 +718,7 @@ function applyRoles(){
   if(S.isAdmin&&S.rolesMissing){S.rolesMissing=false;Store.saveOperators()}
 }
 function onLogout(){
-  unsubs.forEach(u=>u());unsubs=[];Object.values(S.photoSubs).forEach(u=>u());S.photoSubs={};S.photos={};S.receptions=[];S.ready=false;chosenOp=null;pin='';
+  unsubs.forEach(u=>u());unsubs=[];Object.values(S.photoSubs).forEach(u=>u());S.photoSubs={};S.photos={};Object.values(S.docSubs).forEach(u=>u());S.docSubs={};S.docs={};S.openRow=null;if(S.docListUnsub){S.docListUnsub();S.docListUnsub=null}S.docList=[];S.receptions=[];S.ready=false;chosenOp=null;pin='';
   $('#app').hidden=true;$('#login').hidden=false;
   loadPublicOperators().then(renderLogin);
 }
@@ -819,6 +834,7 @@ function renderStats(act,done){
 function renderActive(act){
   const el=$('#activeList');
   if(fs)ensurePhotoSubs(act.map(r=>r.id).concat(S.openRow?[S.openRow]:[]));
+  if(fs)ensureDocSubs(S.openRow?[S.openRow]:[]);
   if(!S.ready){el.innerHTML='<div class="loading">Se încarcă…</div>';return}
   if(!act.length){el.innerHTML=`<div class="empty"><b>Niciun camion în lucru</b>${S.canRecv?'Pornește recepția din lista de camioane programate sau apasă „＋ Recepție neplanificată” — cronometrul pornește automat.':'Când depozitul pornește o recepție, apare aici în timp real.'}</div>`;return}
   const now=Date.now();
@@ -898,7 +914,7 @@ function renderHistory(done){
       <td class="num">${r.pallets??'—'}${r.plannedPallets!=null?`<div class="muted" style="font-size:11px">prog. ${r.plannedPallets}${r.pallets!=null&&r.pallets!==r.plannedPallets?` <span style="color:var(--bad)">(${r.pallets-r.plannedPallets>0?'+':''}${r.pallets-r.plannedPallets})</span>`:''}</div>`:''}</td><td class="num">${r.boxes??'—'}</td>
       <td class="num">${fmtMin(tot)}</td><td class="num muted">${std!=null?std+' min':'—'}</td>
       <td>${diff==null?'<span class="pill na">n/a</span>':`<span class="pill ${cls}">${diff>0?'+':''}${diff} min</span>`}</td>
-      <td><div class="probs">${(r.problems||[]).map(p=>`<span>${esc(p)}</span>`).join('')}${STAGES.flatMap(s=>((r.stageProblems||{})[s.k]||[]).map(p=>`<span title="${esc(s.n)}">${esc(s.n.split(' ')[0])}: ${esc(p)}</span>`)).join('')}${photoTotal(r)?`<span style="background:var(--ok-soft)">📷 ${photoTotal(r)}</span>`:''}${r.note?`<span class="muted" style="background:none;padding:0">${esc(r.note)}</span>`:''}</div></td>
+      <td><div class="probs">${(r.problems||[]).map(p=>`<span>${esc(p)}</span>`).join('')}${STAGES.flatMap(s=>((r.stageProblems||{})[s.k]||[]).map(p=>`<span title="${esc(s.n)}">${esc(s.n.split(' ')[0])}: ${esc(p)}</span>`)).join('')}${photoTotal(r)?`<span style="background:var(--ok-soft)">📷 ${photoTotal(r)}</span>`:''}${r.docCount?`<span style="background:var(--accent-soft)">📄 ${r.docCount}</span>`:''}${r.note?`<span class="muted" style="background:none;padding:0">${esc(r.note)}</span>`:''}</div></td>
     </tr>${open?renderDetail(r):''}`}).join('');
 }
 
@@ -919,6 +935,7 @@ function renderDetail(r){
         </div>
         ${renderStagePanel(r,'hist')}
         <div class="f"><label>Observații generale</label><textarea ${S.canRecv?'':'disabled'} data-efield="note" rows="2">${esc(r.note||'')}</textarea></div>
+        ${docsHtml(r)}
         ${timelineHtml(r.scheduleId?schedOf(r.scheduleId):null,r)}
         <div class="muted" style="font-size:12px">Creată de ${esc(r.createdBy?nameOf(r.createdBy):'—')} · terminată de ${esc(r.finishedBy?nameOf(r.finishedBy):'—')}${r.deletedBy?` · <b>ștearsă de ${esc(r.deletedBy)}</b> la ${fmtDate(r.deletedAt)} ${fmtTime(r.deletedAt)}`:''}${r.restoredBy?` · restaurată de ${esc(r.restoredBy)} la ${fmtDate(r.restoredAt)} ${fmtTime(r.restoredAt)}`:''}</div>
         ${r.status==='deleted'
@@ -984,6 +1001,95 @@ function setUrgentRank(sc,newRank){
   list.splice(newRank-1,0,sc);
   list.forEach((x,i)=>{if(x.urgentRank!==i+1){x.urgentRank=i+1;Store.saveSched(x)}});
 }
+
+/* ---------- Storage: fișiere (documente scanate, poze) ---------- */
+const DOC_TYPES=['CMR','Aviz / Delivery note','Packing list','Certificat calitate','Factură','Altele'];
+const urlCache={};
+async function fileUrl(path){if(!st)throw new Error('Storage indisponibil');if(urlCache[path])return urlCache[path];const u=await st.ref(path).getDownloadURL();urlCache[path]=u;return u}
+function dataUrlToBlob(d){const [h,b]=d.split(',');const mime=h.match(/data:([^;]+)/)[1];const bin=atob(b);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return new Blob([arr],{type:mime})}
+async function uploadFile(path,blob,contentType,extraMeta){if(!st)throw new Error('Spațiul de stocare nu este configurat (Firebase Storage)');await st.ref(path).put(blob,{contentType,customMetadata:{byEmail:S.me.email,by:S.me.name,...(extraMeta||{})}});return path}
+const safeName=n=>String(n||'fisier').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Za-z0-9._-]+/g,'_').slice(0,80);
+const fmtSize=b=>b>=1048576?(b/1048576).toFixed(1)+' MB':Math.max(1,Math.round(b/1024))+' KB';
+
+/* PDF minimal din poze JPEG (A4, o poză pe pagină) — fără biblioteci externe */
+function jpegSize(u8){let i=2;while(i<u8.length){if(u8[i]!==0xFF){i++;continue}const m=u8[i+1];if(m>=0xC0&&m<=0xCF&&m!==0xC4&&m!==0xC8&&m!==0xCC){return {h:(u8[i+5]<<8)|u8[i+6],w:(u8[i+7]<<8)|u8[i+8]}}i+=2+((u8[i+2]<<8)|u8[i+3])}return {w:1,h:1}}
+function buildPdf(jpegs){ // jpegs: Uint8Array[]
+  const enc=new TextEncoder();const parts=[];const offs=[];let len=0;const push=x=>{const b=typeof x==='string'?enc.encode(x):x;parts.push(b);len+=b.length};
+  const n=jpegs.length;const objs=3+n*3;const W=595.28,H=841.89;
+  push('%PDF-1.4\n%\xe2\xe3\xcf\xd3\n');
+  const addObj=(id,body)=>{offs[id]=len;push(id+' 0 obj\n');if(typeof body==='string')push(body);else{push(body.head);push(body.data);push('\nendstream')}push('\nendobj\n')};
+  addObj(1,'<< /Type /Catalog /Pages 2 0 R >>');
+  addObj(2,'<< /Type /Pages /Kids ['+jpegs.map((_,i)=>(4+i*3)+' 0 R').join(' ')+'] /Count '+n+' >>');
+  addObj(3,'<< /Producer (Receptii H10) >>');
+  jpegs.forEach((j,i)=>{const {w,h}=jpegSize(j);const sc=Math.min((W-40)/w,(H-40)/h);const dw=w*sc,dh=h*sc,x=(W-dw)/2,y=(H-dh)/2;const pid=4+i*3,cid=pid+1,iid=pid+2;
+    addObj(pid,`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /XObject << /Im${i} ${iid} 0 R >> >> /Contents ${cid} 0 R >>`);
+    const content=`q ${dw.toFixed(2)} 0 0 ${dh.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm /Im${i} Do Q`;
+    addObj(cid,{head:`<< /Length ${content.length} >>\nstream\n`,data:enc.encode(content)});
+    addObj(iid,{head:`<< /Type /XObject /Subtype /Image /Width ${w} /Height ${h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${j.length} >>\nstream\n`,data:j});});
+  const xref=len;push('xref\n0 '+(objs+1)+'\n0000000000 65535 f \n');for(let i=1;i<=objs;i++)push(String(offs[i]).padStart(10,'0')+' 00000 n \n');
+  push('trailer\n<< /Size '+(objs+1)+' /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF');
+  return new Blob(parts,{type:'application/pdf'});
+}
+async function imagesToPdf(files){const pages=[];for(const f of files){const im=await loadImage(f);let d=drawScaled(im,1800,.7);if(d.length>1400000)d=drawScaled(im,1400,.6);pages.push(new Uint8Array(await dataUrlToBlob(d).arrayBuffer()))}return buildPdf(pages)}
+
+/* documente pe recepție */
+function ensureDocSubs(ids){
+  const want=new Set(ids);
+  Object.keys(S.docSubs).forEach(id=>{if(!want.has(id)){S.docSubs[id]();delete S.docSubs[id];delete S.docs[id]}});
+  ids.forEach(id=>{if(S.docSubs[id])return;S.docSubs[id]=()=>{};
+    S.docSubs[id]=fs.collection('documents').where('receptionId','==',id).onSnapshot(snap=>{S.docs[id]=snap.docs.map(d=>d.data()).sort((a,b)=>a.at-b.at);scheduleRender()},e=>console.warn('docs',e))});
+}
+function docsHtml(rec){
+  const list=S.docs[rec.id]||[];const can=S.canRecv&&rec.status!=='deleted';
+  const items=list.map(d=>`<div class="ditem" data-doc="${d.id}"><span class="dtype">${esc(d.type)}</span><span class="dn">${esc(d.name)}</span><span class="dm">${fmtSize(d.size)} · ${esc(d.by)} · ${fmtDate(d.at)} ${fmtTime(d.at)}</span><span class="spacer"></span><button type="button" class="btn sm" data-docopen="${d.id}">⤓ Deschide</button>${(S.isAdmin||(S.me&&d.byEmail===S.me.email&&S.canRecv))?`<button type="button" class="btn ghost sm" data-docdel="${d.id}" title="Șterge documentul">✕</button>`:''}</div>`).join('');
+  return `<div class="f" data-docpanel="${rec.id}"><label>Documente scanate ${list.length?`(${list.length})`:''}</label>
+    <div class="dlist">${items||'<span class="muted" style="font-size:12px">Niciun document atașat.</span>'}</div>
+    ${can?`<div class="inl" style="margin-top:8px;flex-wrap:wrap"><select class="rosel" data-doctype>${DOC_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
+      <button type="button" class="btn sm" data-docadd="file">⤒ Încarcă PDF / imagine</button><button type="button" class="btn sm" data-docadd="scan">📷 Scanează cu camera</button>
+      <input type="file" accept="application/pdf,image/*" multiple hidden data-doc-input="file"><input type="file" accept="image/*" capture="environment" multiple hidden data-doc-input="scan"></div>
+      <span class="muted" style="font-size:11.5px">PDF-urile se păstrează ca atare (max. 25 MB). Pozele făcute cu camera sau alese din galerie devin un singur PDF.</span>`:''}
+    ${S.docUploading[rec.id]?`<div class="muted" style="font-size:12px;margin-top:4px">Se încarcă… ${S.docUploading[rec.id]}</div>`:''}</div>`;
+}
+async function addDocument(rec,type,files,mode){
+  if(!S.canRecv||!files.length)return;
+  const pdfs=files.filter(f=>f.type==='application/pdf'),imgs=files.filter(f=>f.type.startsWith('image/'));
+  const jobs=[];pdfs.forEach(f=>jobs.push({blob:f,name:f.name,ct:'application/pdf'}));
+  if(imgs.length)jobs.push({make:()=>imagesToPdf(imgs),name:(type.split(' ')[0]+'_'+(rec.plate||rec.supplier)+'_'+fmtDate(rec.finishedAt||rec.startedAt).replace(/\./g,'-')+'.pdf'),ct:'application/pdf'});
+  for(const j of jobs){
+    S.docUploading[rec.id]=j.name;scheduleRender();
+    try{const blob=j.make?await j.make():j.blob;if(blob.size>25*1048576)throw new Error('Fișierul depășește 25 MB');
+      const id='d'+uid();const path='docs/'+rec.id+'/'+id+'_'+safeName(j.name);
+      await uploadFile(path,blob,j.ct,{receptionId:rec.id,type});
+      await fs.doc('documents/'+id).set({id,receptionId:rec.id,supplier:rec.supplier||'',plate:rec.plate||'',day:opKey(rec.finishedAt||rec.startedAt),type,name:j.name,size:blob.size,path,contentType:j.ct,by:S.me.name,byEmail:S.me.email,at:Date.now()});
+      rec.docCount=(rec.docCount||0)+1;Store.saveRec(rec);toast('Document atașat: '+j.name);
+    }catch(e){console.error(e);toast('Documentul nu a putut fi încărcat: '+(e.code||e.message))}
+    delete S.docUploading[rec.id];scheduleRender();
+  }
+}
+async function openDoc(d){try{const u=await fileUrl(d.path);const w=window.open(u,'_blank');if(!w)location.href=u}catch(e){toast('Nu pot deschide documentul: '+(e.code||e.message))}}
+async function deleteDoc(d){if(!confirm('Ștergi documentul „'+d.name+'”?'))return;
+  try{await fs.doc('documents/'+d.id).delete();try{await st.ref(d.path).delete()}catch(e){console.warn(e)}const rec=S.receptions.find(r=>r.id===d.receptionId);if(rec&&rec.docCount){rec.docCount=Math.max(0,rec.docCount-1);Store.saveRec(rec)}delete urlCache[d.path];toast('Document șters')}catch(e){toast('Nu ai drept să ștergi acest document')}}
+document.addEventListener('click',e=>{
+  const o=e.target.closest('[data-docopen]');if(o){const d=Object.values(S.docs).flat().concat(S.docList).find(x=>x.id===o.dataset.docopen);if(d)openDoc(d);return}
+  const x=e.target.closest('[data-docdel]');if(x){const d=Object.values(S.docs).flat().concat(S.docList).find(y=>y.id===x.dataset.docdel);if(d)deleteDoc(d);return}
+  const a=e.target.closest('[data-docadd]');if(a){const panel=a.closest('[data-docpanel]');panel.querySelector(`[data-doc-input="${a.dataset.docadd}"]`).click()}
+});
+document.addEventListener('change',e=>{if(!e.target.matches('[data-doc-input]'))return;const panel=e.target.closest('[data-docpanel]');const rec=S.receptions.find(r=>r.id===panel.dataset.docpanel);const files=Array.from(e.target.files||[]);const type=panel.querySelector('[data-doctype]').value;e.target.value='';if(rec&&files.length)addDocument(rec,type,files,e.target.dataset.docInput)});
+
+/* tab Documente: căutare în toate documentele */
+function docsQuery(){
+  if(S.docListUnsub)return;
+  S.docListUnsub=fs.collection('documents').orderBy('at','desc').limit(2000).onSnapshot(snap=>{S.docList=snap.docs.map(d=>d.data());renderDocs()},e=>{console.warn(e);$('#dInfo').textContent='Nu pot citi documentele: '+(e.code||e)});
+}
+function renderDocs(){
+  const el=$('#dBody');if(!el||$('#tab-docs').hidden)return;
+  const sel=$('#dType');if(sel.options.length<=1)sel.innerHTML='<option value="">Toate</option>'+DOC_TYPES.map(t=>`<option>${t}</option>`).join('');
+  const q=($('#dQ').value||'').trim().toLowerCase().replace(/\s+/g,''),from=$('#dFrom').value,to=$('#dTo').value,type=sel.value;
+  const rows=S.docList.filter(d=>(!from||d.day>=from)&&(!to||d.day<=to)&&(!type||d.type===type)&&(!q||[d.plate,d.supplier,d.name].some(v=>String(v||'').toLowerCase().replace(/\s+/g,'').includes(q))));
+  $('#dInfo').textContent=rows.length+' documente'+(S.docList.length>=2000?' (afișate ultimele 2000 — folosește filtrele de dată)':'')+' · '+fmtSize(rows.reduce((a,d)=>a+(d.size||0),0));
+  el.innerHTML=rows.map(d=>`<tr><td>${fmtDayKey(d.day)}</td><td><b>${esc(d.supplier)}</b></td><td>${d.plate?`<span class="plate" style="font-size:11px;padding:1px 5px">${esc(d.plate)}</span>`:'—'}</td><td><span class="dtype">${esc(d.type)}</span></td><td>${esc(d.name)}</td><td class="num">${fmtSize(d.size)}</td><td>${esc(d.by)}<div class="muted" style="font-size:11px">${fmtDate(d.at)} ${fmtTime(d.at)}</div></td><td style="white-space:nowrap"><button class="btn sm" data-docopen="${d.id}">⤓ Deschide</button> ${(S.isAdmin||(S.me&&d.byEmail===S.me.email&&S.canRecv))?`<button class="btn ghost sm" data-docdel="${d.id}">✕</button>`:''}</td></tr>`).join('')||'<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Niciun document pentru filtrele alese.</td></tr>';
+}
+['#dQ','#dFrom','#dTo','#dType'].forEach(s=>$(s).addEventListener('input',renderDocs));
 
 /* ---------- KPI zilnic / lunar: paleți descărcați vs target ---------- */
 const MONTHS_RO=['ianuarie','februarie','martie','aprilie','mai','iunie','iulie','august','septembrie','octombrie','noiembrie','decembrie'];
@@ -1340,8 +1446,10 @@ async function addPhotos(rec,stage,files){
   S.uploading[rec.id]=(S.uploading[rec.id]||0)+files.length;scheduleRender();
   for(const f of files){
     try{const {data,thumb}=await compressPhoto(f);
-      const id='p'+uid();
-      await fs.doc('photos/'+id).set({id,receptionId:rec.id,stage,data,thumb,by:S.me.name,byEmail:S.me.email,at:Date.now(),bytes:data.length});
+      const id='p'+uid();const doc={id,receptionId:rec.id,stage,thumb,by:S.me.name,byEmail:S.me.email,at:Date.now(),bytes:Math.round(data.length*0.75)};
+      if(st){const path='photos/'+rec.id+'/'+id+'.jpg';await uploadFile(path,dataUrlToBlob(data),'image/jpeg',{receptionId:rec.id,stage});doc.path=path}
+      else doc.data=data;   // fără Storage configurat: poza rămâne în baza de date (compatibil cu versiunile vechi)
+      await fs.doc('photos/'+id).set(doc);
       rec.photoCounts=rec.photoCounts||{};rec.photoCounts[stage]=(rec.photoCounts[stage]||0)+1;Store.saveRec(rec);
     }catch(e){console.error(e);toast('Poza nu a putut fi salvată: '+(e.code||e.message))}
     S.uploading[rec.id]=Math.max(0,(S.uploading[rec.id]||1)-1);
@@ -1354,10 +1462,11 @@ function openLightbox(pid){
   const rec=S.receptions.find(r=>r.id===p.receptionId);
   const mine=S.me&&p.byEmail===S.me.email&&S.canRecv;
   openModal(`<div class="bh"><h2 style="font-size:15px">${esc(rec?rec.supplier:'')} · ${esc(p.stage===GENERAL?'General':(STAGE_BY[p.stage]||{}).n||p.stage)}</h2><span class="spacer"></span><button class="btn ghost sm" data-close>✕</button></div>
-    <div style="background:#000;display:grid;place-items:center"><img src="${p.data}" style="max-width:100%;max-height:70vh;display:block"></div>
+    <div style="background:#000;display:grid;place-items:center;min-height:200px"><img id="lbImg" src="${p.data||p.thumb}" style="max-width:100%;max-height:70vh;display:block"></div>
     <div class="bf" style="justify-content:space-between"><span class="muted" style="font-size:12.5px">${esc(p.by)} · ${fmtDate(p.at)} ${fmtTime(p.at)} · ${Math.round(p.bytes/1024)} KB</span>
-      <span class="inl"><a class="btn sm" href="${p.data}" download="poza_${esc(rec?rec.plate||rec.supplier:'')}_${p.stage}_${fmtTime(p.at).replace(':','')}.jpg">⤓ Salvează</a>${mine?`<button class="btn sm danger" id="lbDel">Șterge poza</button>`:''}</span></div>`);
-  const d=$('#lbDel');if(d)d.addEventListener('click',()=>{if(confirm('Ștergi această poză?'))fs.doc('photos/'+p.id).delete().then(()=>{if(rec){rec.photoCounts=rec.photoCounts||{};rec.photoCounts[p.stage]=Math.max(0,(rec.photoCounts[p.stage]||1)-1);Store.saveRec(rec)}closeModal();toast('Poză ștearsă')}).catch(()=>toast('Nu ai drept să ștergi această poză'))});
+      <span class="inl"><a class="btn sm" id="lbSave" href="${p.data||'#'}" ${p.data?'':'target="_blank"'} download="poza_${esc(rec?rec.plate||rec.supplier:'')}_${p.stage}_${fmtTime(p.at).replace(':','')}.jpg">⤓ Salvează</a>${mine?`<button class="btn sm danger" id="lbDel">Șterge poza</button>`:''}</span></div>`);
+  if(!p.data&&p.path)fileUrl(p.path).then(u=>{const im=$('#lbImg');if(im)im.src=u;const a=$('#lbSave');if(a)a.href=u}).catch(e=>toast('Nu pot încărca poza: '+(e.code||e.message)));
+  const d=$('#lbDel');if(d)d.addEventListener('click',()=>{if(confirm('Ștergi această poză?'))fs.doc('photos/'+p.id).delete().then(()=>{if(p.path&&st)st.ref(p.path).delete().catch(()=>{});if(rec){rec.photoCounts=rec.photoCounts||{};rec.photoCounts[p.stage]=Math.max(0,(rec.photoCounts[p.stage]||1)-1);Store.saveRec(rec)}closeModal();toast('Poză ștearsă')}).catch(()=>toast('Nu ai drept să ștergi această poză'))});
 }
 
 /* evenimente comune panoului (card activ + istoric) */
@@ -1525,6 +1634,7 @@ $('#btnExportHtml').addEventListener('click',async()=>{
   for(let i=0;i<ids.length;i+=30){try{const q=await fs.collection('photos').where('receptionId','in',ids.slice(i,i+30)).get();q.docs.forEach(d=>{const p=d.data();(photos[p.receptionId]=photos[p.receptionId]||[]).push(p)})}catch(e){console.error(e)}}
   const h=[];h.push(`<!DOCTYPE html><html lang="ro"><head><meta charset="utf-8"><title>Raport recepții</title><style>body{font-family:system-ui,sans-serif;margin:20px;color:#1a2230}h1{font-size:20px}h2{font-size:16px;margin:26px 0 6px;border-top:2px solid #245C9E;padding-top:10px}table{border-collapse:collapse;font-size:13px;margin-bottom:8px}td,th{border:1px solid #ccc;padding:4px 8px;text-align:left}th{background:#eef2f7}.st{margin:8px 0 4px;font-weight:600;font-size:13px}.ph{display:flex;flex-wrap:wrap;gap:8px}.ph figure{margin:0;width:260px}.ph img{width:260px;height:195px;object-fit:cover;border:1px solid #ccc;border-radius:4px}.ph figcaption{font-size:11px;color:#666}.cm{font-size:12.5px;background:#f3f5f8;padding:4px 8px;border-radius:4px;margin:2px 0}@media print{h2{break-before:page}}</style></head><body>`);
   h.push(`<h1>Raport recepții camioane</h1><p>${rows.length} recepții · generat ${fmtDate(Date.now())} ${fmtTime(Date.now())} de ${esc(S.me?.name||'')}${$('#fFrom').value||$('#fTo').value?' · perioada '+($('#fFrom').value||'…')+' → '+($('#fTo').value||'…'):''}</p>`);
+  for(const ps of Object.values(photos))for(const p of ps){if(!p.data&&p.path){try{p.data=await fileUrl(p.path)}catch(e){p.data=p.thumb}}}
   for(const r of rows){const tot=Math.round(totalMs(r)/60000);const ps=(photos[r.id]||[]).sort((a,b)=>a.at-b.at);
     h.push(`<h2>${esc(r.supplier)} · ${esc(r.plate||'—')} · ${fmtOpDate(r.startedAt)} S${shiftOf(r.startedAt)}</h2>`);
     h.push(`<table><tr><th>Start</th><td>${fmtDate(r.startedAt)} ${fmtTime(r.startedAt)}</td><th>Sfârșit</th><td>${fmtDate(r.finishedAt)} ${fmtTime(r.finishedAt)}</td>${slotOfRec(r)!=null?`<th>Slot programat</th><td>${slotLabel(slotOfRec(r))}</td>`:''}<th>Durată</th><td>${tot} min${r.stdTotal!=null?' (standard '+r.stdTotal+')':''}${r.timing==='active'?' · calendaristic '+Math.round(wallMs(r)/60000)+' min':''}</td></tr><tr><th>Operator</th><td>${esc(r.operator||'—')}</td><th>Paleți</th><td>${r.pallets??'—'}${r.plannedPallets!=null?' / programat '+r.plannedPallets:''}</td><th>Cutii</th><td>${r.boxes??'—'}</td></tr>${r.note?`<tr><th>Observații</th><td colspan="5">${esc(r.note)}</td></tr>`:''}</table>`);
@@ -1595,8 +1705,8 @@ $('#prNew').addEventListener('keydown',e=>{if(e.key==='Enter')$('#prAdd').click(
 $('#prList').addEventListener('click',e=>{const p=e.target.dataset.prdel;if(p!=null&&!S.isAdmin){toast('Doar administratorul poate șterge din catalog');return}if(p!=null&&confirm('Ștergi „'+p+'” din catalog?')){S.problems=S.problems.filter(x=>x!==p);if(S.problemStageMap)delete S.problemStageMap[p];Store.saveSettings()}});
 
 /* tabs */
-function switchTab(t){S.tab=t;document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t));
-  ['active','history','schedule','suppliers','settings','gate','kpi'].forEach(k=>$('#tab-'+k).hidden=k!==t);if(t==='schedule'&&!S.schedDay)S.schedDay=opKey(Date.now());if(t==='kpi')setTimeout(renderKpi,0);try{localStorage.setItem('rc_tab',t)}catch(e){}}
+function switchTab(t){S.tab=t;if(t==='docs'){docsQuery();setTimeout(renderDocs,0)}document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t));
+  ['active','history','schedule','suppliers','settings','gate','kpi','docs'].forEach(k=>$('#tab-'+k).hidden=k!==t);if(t==='schedule'&&!S.schedDay)S.schedDay=opKey(Date.now());if(t==='kpi')setTimeout(renderKpi,0);try{localStorage.setItem('rc_tab',t)}catch(e){}}
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 
 /* ---------- modale ---------- */
