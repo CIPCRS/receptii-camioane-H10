@@ -429,11 +429,11 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
         <div class="f"><label>Nr. auto / furnizor / fișier</label><input id="dQ" placeholder="ex. AG 44 MLG sau Bader"></div>
         <div class="f"><label>De la (zi operațională)</label><input type="date" id="dFrom"></div>
         <div class="f"><label>Până la</label><input type="date" id="dTo"></div>
-        <div class="f"><label>Tip document</label><select id="dType"><option value="">Toate</option></select></div>
+        <select id="dType" hidden><option value=""></option></select>
       </div>
       <p class="muted" style="font-size:12.5px;margin:0 0 10px" id="dInfo"></p>
-      <div class="tablewrap"><table class="kpt"><thead><tr><th>Zi</th><th>Furnizor</th><th>Nr. auto</th><th>Tip</th><th>Fișier</th><th class="num">Mărime</th><th>Încărcat de</th><th></th></tr></thead><tbody id="dBody"></tbody></table></div>
-      <p class="muted" style="font-size:12px;margin-top:10px">Documentele scanate (CMR, aviz, packing list…) se atașează de depozit pe recepția camionului, din Istoric, după terminarea recepției. Fișierele stau în spațiul de stocare al aplicației; „Deschide” le descarcă pe orice dispozitiv.</p>
+      <div class="tablewrap"><table class="kpt"><thead><tr><th>Zi</th><th>Furnizor</th><th>Nr. auto</th><th>Fișier</th><th class="num">Mărime</th><th>Încărcat de</th><th></th></tr></thead><tbody id="dBody"></tbody></table></div>
+      <p class="muted" style="font-size:12px;margin-top:10px">Setul de documente scanate al camionului (CMR, aviz, packing list…) se atașează de depozit pe recepție, din Istoric, după terminarea recepției. Fișierele stau în spațiul de stocare al aplicației; „Deschide” le descarcă pe orice dispozitiv.</p>
     </section>
     <section id="tab-kpi" hidden>
       <div class="gbar"><button class="btn sm" id="kpPrev" title="Luna anterioară">‹</button><h2 style="margin:0" id="kpLabel"></h2><button class="btn sm" id="kpNext" title="Luna următoare">›</button><button class="btn sm" id="kpToday">Luna curentă</button><span class="spacer"></span><span class="muted" style="font-size:12.5px" id="kpInfo"></span></div>
@@ -497,7 +497,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.0.0';
+const APP_VERSION = '3.0.4';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -516,7 +516,7 @@ function stagesFor(sup,rec){const off=new Set((sup&&sup.stagesOff)||[]);return S
 
 /* Furnizorii din RECEPTION_TIMES_COMPLETE.xlsx — încărcați automat în Firestore la prima pornire */
 const DEFAULT_SUPPLIERS = [
- ['Martur Marocco',65,30,30,60,null,20,'Paleți fără etichete, paleți micști, discrepanțe, paleți neconformi în 50% din livrări'],
+ ['Martur Marocco',65,30,30,60,null,20,'Paleți fără etichete, paleți mixați, discrepanțe, paleți neconformi în 50% din livrări'],
  ['Martur Turkey Kutahya',45,30,15,0,null,20,'Uneori paleți fără etichete – crește timpul alocat'],
  ['Turkey Sunger (Foam)',60,30,15,45,null,20,'Ecopack-uri verzi încărcate pe lungime, greu de descărcat; etichetă manuală pentru depozitare'],
  ['Polmar',45,30,15,0,null,20,'4 cutii mari pe același palet – trebuie separate două pe palet'],
@@ -547,8 +547,11 @@ const DEFAULT_SUPPLIERS = [
  ['Mario Levi',30,40,15,60,null,20,'Cutii mixte, etichete nescanabile; fiecare cutie se scanează de două ori'],
 ].map(r=>({name:r[0],std:{unload:r[1],check:r[2],receipt:r[3],label:r[4],quality:r[5],rack:r[6]},remarks:r[7]}));
 
+/* redenumiri de probleme din catalog: valorile vechi (din recepții salvate) se afișează cu numele nou */
+const PROBLEM_RENAME={'Paleți micști':'Paleți mixați'};
+const renameProblems=a=>(a||[]).map(x=>PROBLEM_RENAME[x]||x);
 const DEFAULT_PROBLEMS = [
- 'Paleți fără etichetă de palet','Paleți micști','Cutii mixte pe palet','Etichete nescanabile',
+ 'Paleți fără etichetă de palet','Paleți mixați','Cutii mixte pe palet','Etichete nescanabile',
  'Discrepanțe cantitate vs. aviz','Paleți deteriorați / de înlocuit','Cutii deteriorate',
  'Paleți grei – transpalet electric','Marfă stivuită, greu de manipulat','Cutii de separat pe paleți',
  'Etichetă manuală necesară','Recepție sistem per aviz separat','Lipsă documente / aviz',
@@ -732,7 +735,9 @@ function subscribe(){
     scheduleRender();
   }));
   unsubs.push(fs.doc('config/settings').onSnapshot(snap=>{
-    if(snap.exists){const d=snap.data();S.problems=d.problems||[];S.problemStageMap=Array.isArray(d.problemStages)?Object.fromEntries(d.problemStages.filter(x=>x&&x.p&&x.s&&x.s.length).map(x=>[x.p,x.s])):(d.problemStageMap||{});S.dayStart=typeof d.dayStart==='number'?d.dayStart:7;S.shiftHours=typeof d.shiftHours==='number'?d.shiftHours:8;S.dailyTarget=typeof d.dailyTarget==='number'&&d.dailyTarget>0?d.dailyTarget:515}
+    if(snap.exists){const d=snap.data();S.problems=(d.problems||[]).map(x=>PROBLEM_RENAME[x]||x).filter((x,i,a)=>a.indexOf(x)===i);S.problemStageMap=Array.isArray(d.problemStages)?Object.fromEntries(d.problemStages.filter(x=>x&&x.p&&x.s&&x.s.length).map(x=>[PROBLEM_RENAME[x.p]||x.p,x.s])):(d.problemStageMap||{});
+      if(S.isAdmin&&(d.problems||[]).some(x=>PROBLEM_RENAME[x]))setTimeout(()=>Store.saveSettings().catch(()=>{}),500);
+      S.dayStart=typeof d.dayStart==='number'?d.dayStart:7;S.shiftHours=typeof d.shiftHours==='number'?d.shiftHours:8;S.dailyTarget=typeof d.dailyTarget==='number'&&d.dailyTarget>0?d.dailyTarget:515}
     else{S.problems=DEFAULT_PROBLEMS.slice();fs.doc('config/settings').set(settingsDoc()).catch(()=>{})}
     scheduleRender();
   }));
@@ -856,6 +861,7 @@ function renderActive(act){
             <span class="sstd">${typeof stdv==='number'?'std '+stdv+' min':'fără standard'}</span></button>`}).join('')}</div>
         <div class="fields">
           <div class="f"><label>Paleți descărcați (numărați) *</label><input ${S.canRecv?'':'disabled'} type="number" min="0" inputmode="numeric" data-field="pallets" value="${r.pallets??''}" placeholder="${r.plannedPallets!=null?'numără și introdu':'0'}" style="${r.pallets==null?'border-color:var(--warn)':''}">${r.plannedPallets!=null?`<div class="pref">programat <b>${r.plannedPallets}</b>${r.pallets!=null&&r.pallets!==r.plannedPallets?` · diferență <b style="color:var(--bad)">${r.pallets-r.plannedPallets>0?'+':''}${r.pallets-r.plannedPallets}</b>`:''}</div>`:''}</div>
+          <div class="f"><label>din care mixați *</label><input ${S.canRecv?'':'disabled'} type="number" min="0" inputmode="numeric" data-field="mixedPallets" value="${r.mixedPallets??''}" placeholder="0 dacă nu sunt" style="${r.mixedPallets==null?'border-color:var(--warn)':''}"><div class="pref">parte din totalul numărat</div></div>
           <div class="f"><label>Cutii</label><input ${S.canRecv?'':'disabled'} type="number" min="0" inputmode="numeric" data-field="boxes" value="${r.boxes??''}" placeholder="0"></div>
           <div class="f"><label>Operator</label><select ${S.canRecv?'':'disabled'} data-field="operator"><option value="">—</option>${opNames().concat(r.operator&&!opNames().includes(r.operator)?[r.operator]:[]).map(o=>`<option ${o===r.operator?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
           <div class="f"><label>Nr. aviz / notă scurtă</label><input ${S.canRecv?'':'disabled'} data-field="ref" value="${esc(r.ref||'')}" placeholder="opțional"></div>
@@ -911,10 +917,10 @@ function renderHistory(done){
       <td><b style="${del?'text-decoration:line-through':''}">${esc(r.supplier)}</b>${r.ref?`<div class="muted" style="font-size:12px">${esc(r.ref)}</div>`:''}</td>
       <td><span class="plate" style="font-size:12px;padding:2px 6px">${esc(r.plate||'—')}</span></td>
       <td>${esc(r.operator||'—')}</td>
-      <td class="num">${r.pallets??'—'}${r.plannedPallets!=null?`<div class="muted" style="font-size:11px">prog. ${r.plannedPallets}${r.pallets!=null&&r.pallets!==r.plannedPallets?` <span style="color:var(--bad)">(${r.pallets-r.plannedPallets>0?'+':''}${r.pallets-r.plannedPallets})</span>`:''}</div>`:''}</td><td class="num">${r.boxes??'—'}</td>
+      <td class="num">${r.pallets??'—'}${r.mixedPallets?`<div class="muted" style="font-size:11px">mixați ${r.mixedPallets}</div>`:''}${r.plannedPallets!=null?`<div class="muted" style="font-size:11px">prog. ${r.plannedPallets}${r.pallets!=null&&r.pallets!==r.plannedPallets?` <span style="color:var(--bad)">(${r.pallets-r.plannedPallets>0?'+':''}${r.pallets-r.plannedPallets})</span>`:''}</div>`:''}</td><td class="num">${r.boxes??'—'}</td>
       <td class="num">${fmtMin(tot)}</td><td class="num muted">${std!=null?std+' min':'—'}</td>
       <td>${diff==null?'<span class="pill na">n/a</span>':`<span class="pill ${cls}">${diff>0?'+':''}${diff} min</span>`}</td>
-      <td><div class="probs">${(r.problems||[]).map(p=>`<span>${esc(p)}</span>`).join('')}${STAGES.flatMap(s=>((r.stageProblems||{})[s.k]||[]).map(p=>`<span title="${esc(s.n)}">${esc(s.n.split(' ')[0])}: ${esc(p)}</span>`)).join('')}${photoTotal(r)?`<span style="background:var(--ok-soft)">📷 ${photoTotal(r)}</span>`:''}${r.docCount?`<span style="background:var(--accent-soft)">📄 ${r.docCount}</span>`:''}${r.note?`<span class="muted" style="background:none;padding:0">${esc(r.note)}</span>`:''}</div></td>
+      <td><div class="probs">${renameProblems(r.problems).map(p=>`<span>${esc(p)}</span>`).join('')}${STAGES.flatMap(s=>renameProblems((r.stageProblems||{})[s.k]||[]).map(p=>`<span title="${esc(s.n)}">${esc(s.n.split(' ')[0])}: ${esc(p)}</span>`)).join('')}${photoTotal(r)?`<span style="background:var(--ok-soft)">📷 ${photoTotal(r)}</span>`:''}${r.docCount?`<span style="background:var(--accent-soft)">📄 ${r.docCount}</span>`:''}${r.note?`<span class="muted" style="background:none;padding:0">${esc(r.note)}</span>`:''}</div></td>
     </tr>${open?renderDetail(r):''}`}).join('');
 }
 
@@ -929,6 +935,7 @@ function renderDetail(r){
       <div style="display:grid;gap:10px">
         <div class="fields">
           <div class="f"><label>Paleți</label><input ${S.canRecv?'':'disabled'} type="number" data-efield="pallets" value="${r.pallets??''}"></div>
+          <div class="f"><label>din care mixați</label><input ${S.canRecv?'':'disabled'} type="number" min="0" data-efield="mixedPallets" value="${r.mixedPallets??''}"></div>
           <div class="f"><label>Cutii</label><input ${S.canRecv?'':'disabled'} type="number" data-efield="boxes" value="${r.boxes??''}"></div>
           <div class="f"><label>Nr. auto</label><input ${S.canRecv?'':'disabled'} class="plateIn" data-efield="plate" value="${esc(r.plate||'')}"></div>
           <div class="f"><label>Operator</label><select ${S.canRecv?'':'disabled'} data-efield="operator"><option value="">—</option>${opNames().concat(r.operator&&!opNames().includes(r.operator)?[r.operator]:[]).map(o=>`<option ${o===r.operator?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
@@ -1041,13 +1048,12 @@ function ensureDocSubs(ids){
 }
 function docsHtml(rec){
   const list=S.docs[rec.id]||[];const can=S.canRecv&&rec.status!=='deleted';
-  const items=list.map(d=>`<div class="ditem" data-doc="${d.id}"><span class="dtype">${esc(d.type)}</span><span class="dn">${esc(d.name)}</span><span class="dm">${fmtSize(d.size)} · ${esc(d.by)} · ${fmtDate(d.at)} ${fmtTime(d.at)}</span><span class="spacer"></span><button type="button" class="btn sm" data-docopen="${d.id}">⤓ Deschide</button>${(S.isAdmin||(S.me&&d.byEmail===S.me.email&&S.canRecv))?`<button type="button" class="btn ghost sm" data-docdel="${d.id}" title="Șterge documentul">✕</button>`:''}</div>`).join('');
+  const items=list.map(d=>`<div class="ditem" data-doc="${d.id}">${d.type&&d.type!=='Documente'?`<span class="dtype">${esc(d.type)}</span>`:'📄'}<span class="dn">${esc(d.name)}</span><span class="dm">${fmtSize(d.size)} · ${esc(d.by)} · ${fmtDate(d.at)} ${fmtTime(d.at)}</span><span class="spacer"></span><button type="button" class="btn sm" data-docopen="${d.id}">⤓ Deschide</button>${(S.isAdmin||(S.me&&d.byEmail===S.me.email&&S.canRecv))?`<button type="button" class="btn ghost sm" data-docdel="${d.id}" title="Șterge documentul">✕</button>`:''}</div>`).join('');
   return `<div class="f" data-docpanel="${rec.id}"><label>Documente scanate ${list.length?`(${list.length})`:''}</label>
     <div class="dlist">${items||'<span class="muted" style="font-size:12px">Niciun document atașat.</span>'}</div>
-    ${can?`<div class="inl" style="margin-top:8px;flex-wrap:wrap"><select class="rosel" data-doctype>${DOC_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
-      <button type="button" class="btn sm" data-docadd="file">⤒ Încarcă PDF / imagine</button><button type="button" class="btn sm" data-docadd="scan">📷 Scanează cu camera</button>
-      <input type="file" accept="application/pdf,image/*" multiple hidden data-doc-input="file"><input type="file" accept="image/*" capture="environment" multiple hidden data-doc-input="scan"></div>
-      <span class="muted" style="font-size:11.5px">PDF-urile se păstrează ca atare (max. 25 MB). Pozele făcute cu camera sau alese din galerie devin un singur PDF.</span>`:''}
+    ${can?`<div class="inl" style="margin-top:8px;flex-wrap:wrap"><button type="button" class="btn sm" data-docadd="file">⤒ Încarcă PDF</button>
+      <input type="file" accept="application/pdf,image/*" multiple hidden data-doc-input="file"></div>
+      <span class="muted" style="font-size:11.5px">Setul de documente al camionului (CMR, aviz, packing list…) într-un singur PDF scanat, max. 25 MB. Se pot încărca și mai multe fișiere.</span>`:''}
     ${S.docUploading[rec.id]?`<div class="muted" style="font-size:12px;margin-top:4px">Se încarcă… ${S.docUploading[rec.id]}</div>`:''}</div>`;
 }
 async function addDocument(rec,type,files,mode){
@@ -1074,7 +1080,7 @@ document.addEventListener('click',e=>{
   const x=e.target.closest('[data-docdel]');if(x){const d=Object.values(S.docs).flat().concat(S.docList).find(y=>y.id===x.dataset.docdel);if(d)deleteDoc(d);return}
   const a=e.target.closest('[data-docadd]');if(a){const panel=a.closest('[data-docpanel]');panel.querySelector(`[data-doc-input="${a.dataset.docadd}"]`).click()}
 });
-document.addEventListener('change',e=>{if(!e.target.matches('[data-doc-input]'))return;const panel=e.target.closest('[data-docpanel]');const rec=S.receptions.find(r=>r.id===panel.dataset.docpanel);const files=Array.from(e.target.files||[]);const type=panel.querySelector('[data-doctype]').value;e.target.value='';if(rec&&files.length)addDocument(rec,type,files,e.target.dataset.docInput)});
+document.addEventListener('change',e=>{if(!e.target.matches('[data-doc-input]'))return;const panel=e.target.closest('[data-docpanel]');const rec=S.receptions.find(r=>r.id===panel.dataset.docpanel);const files=Array.from(e.target.files||[]);const type='Documente';e.target.value='';if(rec&&files.length)addDocument(rec,type,files,e.target.dataset.docInput)});
 
 /* tab Documente: căutare în toate documentele */
 function docsQuery(){
@@ -1083,11 +1089,11 @@ function docsQuery(){
 }
 function renderDocs(){
   const el=$('#dBody');if(!el||$('#tab-docs').hidden)return;
-  const sel=$('#dType');if(sel.options.length<=1)sel.innerHTML='<option value="">Toate</option>'+DOC_TYPES.map(t=>`<option>${t}</option>`).join('');
+  const sel=$('#dType');
   const q=($('#dQ').value||'').trim().toLowerCase().replace(/\s+/g,''),from=$('#dFrom').value,to=$('#dTo').value,type=sel.value;
   const rows=S.docList.filter(d=>(!from||d.day>=from)&&(!to||d.day<=to)&&(!type||d.type===type)&&(!q||[d.plate,d.supplier,d.name].some(v=>String(v||'').toLowerCase().replace(/\s+/g,'').includes(q))));
   $('#dInfo').textContent=rows.length+' documente'+(S.docList.length>=2000?' (afișate ultimele 2000 — folosește filtrele de dată)':'')+' · '+fmtSize(rows.reduce((a,d)=>a+(d.size||0),0));
-  el.innerHTML=rows.map(d=>`<tr><td>${fmtDayKey(d.day)}</td><td><b>${esc(d.supplier)}</b></td><td>${d.plate?`<span class="plate" style="font-size:11px;padding:1px 5px">${esc(d.plate)}</span>`:'—'}</td><td><span class="dtype">${esc(d.type)}</span></td><td>${esc(d.name)}</td><td class="num">${fmtSize(d.size)}</td><td>${esc(d.by)}<div class="muted" style="font-size:11px">${fmtDate(d.at)} ${fmtTime(d.at)}</div></td><td style="white-space:nowrap"><button class="btn sm" data-docopen="${d.id}">⤓ Deschide</button> ${(S.isAdmin||(S.me&&d.byEmail===S.me.email&&S.canRecv))?`<button class="btn ghost sm" data-docdel="${d.id}">✕</button>`:''}</td></tr>`).join('')||'<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Niciun document pentru filtrele alese.</td></tr>';
+  el.innerHTML=rows.map(d=>`<tr><td>${fmtDayKey(d.day)}</td><td><b>${esc(d.supplier)}</b></td><td>${d.plate?`<span class="plate" style="font-size:11px;padding:1px 5px">${esc(d.plate)}</span>`:'—'}</td><td>📄 ${esc(d.name)}${d.type&&d.type!=='Documente'?` <span class="dtype">${esc(d.type)}</span>`:''}</td><td class="num">${fmtSize(d.size)}</td><td>${esc(d.by)}<div class="muted" style="font-size:11px">${fmtDate(d.at)} ${fmtTime(d.at)}</div></td><td style="white-space:nowrap"><button class="btn sm" data-docopen="${d.id}">⤓ Deschide</button> ${(S.isAdmin||(S.me&&d.byEmail===S.me.email&&S.canRecv))?`<button class="btn ghost sm" data-docdel="${d.id}">✕</button>`:''}</td></tr>`).join('')||'<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">Niciun document pentru filtrele alese.</td></tr>';
 }
 ['#dQ','#dFrom','#dTo','#dType'].forEach(s=>$(s).addEventListener('input',renderDocs));
 
@@ -1393,7 +1399,7 @@ function stageTabsFor(rec){return stagesFor(supOf(rec.supplier),rec).concat([{k:
    Odată ce există bifele, pe o etapă apar DOAR problemele bifate pentru ea; cele nebifate rămân disponibile la „General”. */
 function stageMapConfigured(){const m=S.problemStageMap||{};return Object.keys(m).some(p=>m[p]&&m[p].length)}
 function problemsForStage(k){const m=S.problemStageMap||{};if(k===GENERAL||!stageMapConfigured())return S.problems.slice();return S.problems.filter(p=>(m[p]||[]).includes(k))}
-function stageProblems(rec,k){return k===GENERAL?(rec.problems||[]):((rec.stageProblems||{})[k]||[])}
+function stageProblems(rec,k){return renameProblems(k===GENERAL?(rec.problems||[]):((rec.stageProblems||{})[k]||[]))}
 function stageNotes(rec,k){return ((rec.stageNotes||{})[k]||[])}
 function photosOf(recId,k){return (S.photos[recId]||[]).filter(p=>!k||p.stage===k).sort((a,b)=>a.at-b.at)}
 function uiStageOf(rec){if(S.uiStage[rec.id])return S.uiStage[rec.id];const a=activeStage(rec);if(a)return a;const withContent=STAGE_TABS.find(s=>{const c=countsFor(rec,s.k);return c.p||c.c||c.f});return withContent?withContent.k:(stagesFor(supOf(rec.supplier),rec)[0]||STAGES[0]).k}
@@ -1501,7 +1507,7 @@ panelHandler($('#activeList'),id=>S.receptions.find(r=>r.id===id));
 panelHandler($('#histBody'),id=>S.receptions.find(r=>r.id===id));
 
 /* text rezumat probleme/comentarii pe etape (istoric, CSV) */
-function problemsSummary(r){const parts=[];if((r.problems||[]).length)parts.push((r.problems||[]).join(', '));STAGES.forEach(s=>{const a=(r.stageProblems||{})[s.k]||[];if(a.length)parts.push(s.n+': '+a.join(', '))});return parts.join(' | ')}
+function problemsSummary(r){const parts=[];if((r.problems||[]).length)parts.push(renameProblems(r.problems).join(', '));STAGES.forEach(s=>{const a=renameProblems((r.stageProblems||{})[s.k]||[]);if(a.length)parts.push(s.n+': '+a.join(', '))});return parts.join(' | ')}
 function notesSummary(r){const parts=[];STAGE_TABS.forEach(s=>{const a=(r.stageNotes||{})[s.k]||[];a.forEach(n=>parts.push((s.k===GENERAL?'General':s.n)+' ('+n.by+' '+fmtTime(n.at)+'): '+n.t))});return parts.join(' | ')}
 function photoCounts(r){const c=r.photoCounts||{};return STAGE_TABS.map(s=>c[s.k]||0)}
 
@@ -1533,7 +1539,7 @@ function confirmFinish(rec){
     <div class="bb">
       <p style="margin:0;font-size:15px">Ești sigur că vrei să termini recepția pentru <b>${esc(rec.supplier)}</b>${rec.plate?` · <span class="plate" style="font-size:12px;padding:2px 6px">${esc(rec.plate)}</span>`:''}?</p>
       <div class="plan-hint" style="background:var(--surface2);border-color:var(--line)">
-        <span>Durată: <b class="mono">${fmtMin(tot)}</b>${std?` (standard ${std} min)`:''} · Paleți: <b class="mono">${rec.pallets}</b>${rec.plannedPallets!=null?` (programat ${rec.plannedPallets})`:''}${rec.boxes!=null?` · Cutii: <b class="mono">${rec.boxes}</b>`:''}</span>
+        <span>Durată: <b class="mono">${fmtMin(tot)}</b>${std?` (standard ${std} min)`:''} · Paleți: <b class="mono">${rec.pallets}</b>${rec.plannedPallets!=null?` (programat ${rec.plannedPallets})`:''}, din care mixați <b class="mono">${rec.mixedPallets??0}</b>${rec.boxes!=null?` · Cutii: <b class="mono">${rec.boxes}</b>`:''}</span>
         <span class="muted" style="font-size:12.5px">${nProb?nProb+' probleme bifate':'Nicio problemă bifată'} · ${photoTotal(rec)} poze · cronometrul se oprește, recepția trece în Istoric (se poate redeschide).</span>
       </div>
     </div>
@@ -1567,6 +1573,8 @@ $('#activeList').addEventListener('click',e=>{
   const act=e.target.closest('[data-act]')?.dataset.act;
   if(act==='pause'){stopAllStages(rec,now);Store.saveRec(rec)}
   if(act==='finish'){
+    if(rec.pallets!=null&&rec.pallets!==''&&(rec.mixedPallets==null||rec.mixedPallets==='')){toast('Introdu și numărul de paleți mixați (0 dacă nu sunt) — face parte din totalul numărat');const i=card.querySelector('[data-field=mixedPallets]');if(i){i.focus();i.style.outline='2px solid var(--bad)';setTimeout(()=>i.style.outline='',2500)}return}
+    if(rec.pallets!=null&&rec.mixedPallets!=null&&rec.mixedPallets>rec.pallets){toast('Paleții mixați ('+rec.mixedPallets+') nu pot depăși totalul numărat ('+rec.pallets+')');const i=card.querySelector('[data-field=mixedPallets]');if(i)i.focus();return}
     if(rec.pallets==null||rec.pallets===''){toast('Introdu numărul real de paleți descărcați înainte de a termina recepția');const i=card.querySelector('[data-field=pallets]');if(i){i.focus();i.style.outline='2px solid var(--bad)';setTimeout(()=>i.style.outline='',2500)}return}
     confirmFinish(rec);
   }
@@ -1577,6 +1585,7 @@ $('#activeList').addEventListener('change',e=>{
   if(!S.canRecv){scheduleRender();return}
   const rec=S.receptions.find(r=>r.id===e.target.closest('.card').dataset.id);if(!rec)return;
   let v=e.target.value;if(e.target.type==='number')v=v===''?null:+v;
+  if(f==='mixedPallets'&&v!=null&&rec.pallets!=null&&v>rec.pallets)toast('Atenție: paleții mixați depășesc totalul numărat');
   rec[f]=v;Store.saveRec(rec);
 });
 
@@ -1610,12 +1619,12 @@ $('#histBody').addEventListener('change',e=>{
 $('#btnExport').addEventListener('click',async()=>{
   const rows=filteredHistory(S.receptions.filter(r=>r.status==='done'));
   if(!rows.length){toast('Nimic de exportat pentru filtrele alese');return}
-  const H=['Zi operațională','Schimb','Data calendaristică','Ora start','Ora sfârșit','Slot programat','Intrat în curte','Ieșit din curte','Urgent','Istoric status','Furnizor','Transportator','Proiect','Nr. auto','Operator','Nr. aviz / notă','Paleți programați','Paleți','Diferență paleți','Cutii','Durată totală (min)','Durată calendaristică (min)','Standard (min)','Diferență (min)',...STAGES.map(s=>s.n+' (min)'),'Probleme (pe etape)','Comentarii etape',...STAGE_TABS.map(s=>'Poze '+(s.k===GENERAL?'general':s.n)),'Poze total','Observații'];
+  const H=['Zi operațională','Schimb','Data calendaristică','Ora start','Ora sfârșit','Slot programat','Intrat în curte','Ieșit din curte','Urgent','Istoric status','Furnizor','Transportator','Proiect','Nr. auto','Operator','Nr. aviz / notă','Paleți programați','Paleți','din care mixați','Diferență paleți','Cutii','Durată totală (min)','Durată calendaristică (min)','Standard (min)','Diferență (min)',...STAGES.map(s=>s.n+' (min)'),'Probleme (pe etape)','Comentarii etape',...STAGE_TABS.map(s=>'Poze '+(s.k===GENERAL?'general':s.n)),'Poze total','Observații'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
   const lines=[H.map(q).join(';')];
   for(const r of rows){const tot=Math.round(totalMs(r)/60000);
     const sc=r.scheduleId?schedOf(r.scheduleId):null;
-    lines.push([fmtOpDate(r.startedAt),'S'+shiftOf(r.startedAt),fmtDate(r.startedAt),fmtTime(r.startedAt),fmtTime(r.finishedAt),slotOfRec(r)!=null?slotLabel(slotOfRec(r)):'',sc&&sc.gateIn?fmtTime(sc.gateIn):'',sc&&sc.gateOut?fmtTime(sc.gateOut):'',sc&&sc.urgent?'DA'+(sc.urgentRank?' #'+sc.urgentRank:'')+(sc.urgentReason?' – '+sc.urgentReason:''):'',statusTimeline(sc,r).map(e=>fmtTime(e.at)+' '+e.label+(e.note?' ('+e.note+')':'')).join(' → '),r.supplier,r.transport||'',r.project||'',r.plate,r.operator,r.ref,r.plannedPallets,r.pallets,r.plannedPallets!=null&&r.pallets!=null?r.pallets-r.plannedPallets:'',r.boxes,tot,Math.round(wallMs(r)/60000),r.stdTotal,r.stdTotal!=null?tot-r.stdTotal:'',
+    lines.push([fmtOpDate(r.startedAt),'S'+shiftOf(r.startedAt),fmtDate(r.startedAt),fmtTime(r.startedAt),fmtTime(r.finishedAt),slotOfRec(r)!=null?slotLabel(slotOfRec(r)):'',sc&&sc.gateIn?fmtTime(sc.gateIn):'',sc&&sc.gateOut?fmtTime(sc.gateOut):'',sc&&sc.urgent?'DA'+(sc.urgentRank?' #'+sc.urgentRank:'')+(sc.urgentReason?' – '+sc.urgentReason:''):'',statusTimeline(sc,r).map(e=>fmtTime(e.at)+' '+e.label+(e.note?' ('+e.note+')':'')).join(' → '),r.supplier,r.transport||'',r.project||'',r.plate,r.operator,r.ref,r.plannedPallets,r.pallets,r.mixedPallets??'',r.plannedPallets!=null&&r.pallets!=null?r.pallets-r.plannedPallets:'',r.boxes,tot,Math.round(wallMs(r)/60000),r.stdTotal,r.stdTotal!=null?tot-r.stdTotal:'',
       ...STAGES.map(s=>Math.round(stageMs(r,s.k)/60000)),problemsSummary(r),notesSummary(r),...photoCounts(r),photoTotal(r),r.note].map(q).join(';'))}
   const csv='\uFEFF'+lines.join('\r\n');
   const name='receptii_'+opKey(Date.now())+'.csv';
@@ -1637,7 +1646,7 @@ $('#btnExportHtml').addEventListener('click',async()=>{
   for(const ps of Object.values(photos))for(const p of ps){if(!p.data&&p.path){try{p.data=await fileUrl(p.path)}catch(e){p.data=p.thumb}}}
   for(const r of rows){const tot=Math.round(totalMs(r)/60000);const ps=(photos[r.id]||[]).sort((a,b)=>a.at-b.at);
     h.push(`<h2>${esc(r.supplier)} · ${esc(r.plate||'—')} · ${fmtOpDate(r.startedAt)} S${shiftOf(r.startedAt)}</h2>`);
-    h.push(`<table><tr><th>Start</th><td>${fmtDate(r.startedAt)} ${fmtTime(r.startedAt)}</td><th>Sfârșit</th><td>${fmtDate(r.finishedAt)} ${fmtTime(r.finishedAt)}</td>${slotOfRec(r)!=null?`<th>Slot programat</th><td>${slotLabel(slotOfRec(r))}</td>`:''}<th>Durată</th><td>${tot} min${r.stdTotal!=null?' (standard '+r.stdTotal+')':''}${r.timing==='active'?' · calendaristic '+Math.round(wallMs(r)/60000)+' min':''}</td></tr><tr><th>Operator</th><td>${esc(r.operator||'—')}</td><th>Paleți</th><td>${r.pallets??'—'}${r.plannedPallets!=null?' / programat '+r.plannedPallets:''}</td><th>Cutii</th><td>${r.boxes??'—'}</td></tr>${r.note?`<tr><th>Observații</th><td colspan="5">${esc(r.note)}</td></tr>`:''}</table>`);
+    h.push(`<table><tr><th>Start</th><td>${fmtDate(r.startedAt)} ${fmtTime(r.startedAt)}</td><th>Sfârșit</th><td>${fmtDate(r.finishedAt)} ${fmtTime(r.finishedAt)}</td>${slotOfRec(r)!=null?`<th>Slot programat</th><td>${slotLabel(slotOfRec(r))}</td>`:''}<th>Durată</th><td>${tot} min${r.stdTotal!=null?' (standard '+r.stdTotal+')':''}${r.timing==='active'?' · calendaristic '+Math.round(wallMs(r)/60000)+' min':''}</td></tr><tr><th>Operator</th><td>${esc(r.operator||'—')}</td><th>Paleți</th><td>${r.pallets??'—'}${r.mixedPallets?' (din care mixați '+r.mixedPallets+')':''}${r.plannedPallets!=null?' / programat '+r.plannedPallets:''}</td><th>Cutii</th><td>${r.boxes??'—'}</td></tr>${r.note?`<tr><th>Observații</th><td colspan="5">${esc(r.note)}</td></tr>`:''}</table>`);
     for(const s of STAGE_TABS){const pr=stageProblems(r,s.k),nt=stageNotes(r,s.k),pp=ps.filter(p=>p.stage===s.k);if(!pr.length&&!nt.length&&!pp.length)continue;
       h.push(`<div class="st">${esc(s.k===GENERAL?'General':s.n)}${s.k!==GENERAL?' · '+Math.round(stageMs(r,s.k)/60000)+' min':''}</div>`);
       if(pr.length)h.push(`<div>Probleme: <b>${esc(pr.join(', '))}</b></div>`);
