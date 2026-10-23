@@ -499,7 +499,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.0.6';
+const APP_VERSION = '3.1.0';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -569,7 +569,7 @@ const shiftDay = (k,n)=>dayKey(dayKeyToTs(k)+n*86400000);
 const fmtDayKey = k=>{const [y,m,d]=k.split('-');const dn=['Duminică','Luni','Marți','Miercuri','Joi','Vineri','Sâmbătă'][new Date(+y,+m-1,+d).getDay()];return dn+' '+d+'.'+m+'.'+y};
 
 /* ---------- stare ---------- */
-const S = { docs:{}, docSubs:{}, docList:[], docListUnsub:null, docUploading:{}, kpiMonth:null, kpiExtra:{}, dailyTarget:515, receptions:[], suppliers:[], problems:[], canRank:false, problemStageMap:{}, photos:{}, photoSubs:{}, photoCounts:{}, uiStage:{}, uploading:{}, operators:[], dayStart:7, shiftHours:8, schedules:[], schedExtra:[], schedDay:null, planners:[], isPlanner:false, role:'viewer', canRecv:false, canPlan:false, rolesMissing:false, admins:[], me:null, isAdmin:false, tab:'active', openRow:null, ready:false };
+const S = { pinState:{}, docs:{}, docSubs:{}, docList:[], docListUnsub:null, docUploading:{}, kpiMonth:null, kpiExtra:{}, dailyTarget:515, receptions:[], suppliers:[], problems:[], canRank:false, problemStageMap:{}, photos:{}, photoSubs:{}, photoCounts:{}, uiStage:{}, uploading:{}, operators:[], dayStart:7, shiftHours:8, schedules:[], schedExtra:[], schedDay:null, planners:[], isPlanner:false, role:'viewer', canRecv:false, canPlan:false, rolesMissing:false, admins:[], me:null, isAdmin:false, tab:'active', openRow:null, ready:false };
 let fb=null, auth=null, fs=null, st=null, pendingRender=false, unsubs=[];
 
 /* ---------- utilitare ---------- */
@@ -631,7 +631,7 @@ function initFirebase(){
 }
 
 /* ---------- login ---------- */
-let pin='', chosenOp=null;
+let pin='', chosenOp=null, lastLoginPin='';
 async function loadPublicOperators(){
   try{const d=await fs.doc('public/operators').get();
     if(d.exists){const x=d.data();S.operators=x.list||[];S.admins=x.admins||[];S.planners=x.planners||[];return true}
@@ -687,7 +687,7 @@ async function pinKey(k){
   drawDots();
   if(pin.length===6){
     const p=pin;pin='';
-    try{await auth.signInWithEmailAndPassword(chosenOp.email,p)}
+    try{await auth.signInWithEmailAndPassword(chosenOp.email,p);lastLoginPin=p}
     catch(err){const d=$('#dots');if(d){d.classList.add('err');setTimeout(()=>{d.classList.remove('err');drawDots()},350)}const e=$('#pinErr');if(e)e.textContent=friendlyAuthError(err)}
   }
 }
@@ -701,7 +701,7 @@ function onLogin(user){
   S.me=S.operators.find(o=>o.email===user.email)||{name:user.email.split('@')[0],email:user.email};
   applyRoles();
   $('#login').hidden=true;$('#app').hidden=false;
-  subscribe();
+  subscribe();setTimeout(checkForcedPin,800);
 }
 function applyRoles(){
   if(!S.me)return;
@@ -747,6 +747,7 @@ function subscribe(){
   unsubs.push(fs.collection('schedules').where('day','>=',fromDay).onSnapshot(snap=>{
     S.schedules=snap.docs.map(d=>d.data());scheduleRender();
   },e=>{console.error(e);toast('Eroare la citirea programărilor: '+e.code)}));
+  unsubs.push(fs.collection('pinstate').onSnapshot(snap=>{S.pinState={};snap.docs.forEach(d=>{S.pinState[d.id]=d.data()});scheduleRender();checkForcedPin()},()=>{}));
   unsubs.push(fs.doc('public/operators').onSnapshot(snap=>{
     if(snap.exists){const x=snap.data();S.operators=x.list||[];S.admins=x.admins||[];S.planners=x.planners||[];S.rolesMissing=!x.roles;
       if(S.me){const m=S.operators.find(o=>o.email===S.me.email);if(m)S.me=m;applyRoles()}}
@@ -966,7 +967,7 @@ function renderSuppliers(){
 function renderSettings(){
   const ops=S.operators.slice().sort((a,b)=>(a.active===false)-(b.active===false)||a.name.localeCompare(b.name,'ro'));
   const nAct=ops.filter(o=>o.active!==false).length;const oc=$('#opCount');if(oc)oc.textContent=nAct+' activi'+(ops.length-nAct?' · '+(ops.length-nAct)+' dezactivați':'');
-  $('#opList').innerHTML=ops.map(o=>{const r=roleOf(o);return `<div class="oprow ${o.active===false?'off':''}"><span class="on" title="${esc(o.name)}">${esc(o.name)}${o.active===false?' <span class="rolelbl">(dezactivat)</span>':''}</span>${S.isAdmin?`<select class="rosel" data-oprole="${esc(o.email)}">${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${k===r?'selected':''}>${v}</option>`).join('')}</select>`:`<span class="rolelbl">${ROLES[r]}</span>`}${S.isAdmin&&o.email!==S.me.email?`<button data-optoggle="${esc(o.email)}" title="${o.active===false?'Reactivează':'Dezactivează'}">${o.active===false?'↻':'×'}</button>`:''}</div>`}).join('')||'<span class="muted">Niciun operator încă.</span>';
+  $('#opList').innerHTML=ops.map(o=>{const r=roleOf(o);return `<div class="oprow ${o.active===false?'off':''}"><span class="on" title="${esc(o.name)}">${esc(o.name)}${o.active===false?' <span class="rolelbl">(dezactivat)</span>':''}${pinPending(o)?' <span class="pill warn" style="font-size:10px" title="Nu și-a schimbat încă PIN-ul inițial">PIN inițial</span>':''}</span>${S.isAdmin?`<select class="rosel" data-oprole="${esc(o.email)}">${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${k===r?'selected':''}>${v}</option>`).join('')}</select>`:`<span class="rolelbl">${ROLES[r]}</span>`}${S.isAdmin&&o.email!==S.me.email?`<button data-optoggle="${esc(o.email)}" title="${o.active===false?'Reactivează':'Dezactivează'}">${o.active===false?'↻':'×'}</button>`:''}</div>`}).join('')||'<span class="muted">Niciun operator încă.</span>';
   renderProblemStages();
   $('#prList').innerHTML=S.problems.map(p=>`<span class="tag">${esc(p)}${S.isAdmin?`<button data-prdel="${esc(p)}" title="Șterge">×</button>`:''}</span>`).join('');
   const ds=$('#dayStart');if(ds&&document.activeElement!==ds){ds.innerHTML=Array.from({length:24},(_,h)=>`<option value="${h}" ${h===S.dayStart?'selected':''}>${pad(h)}:00</option>`).join('')}
@@ -1690,7 +1691,7 @@ $('#opAdd').addEventListener('click',async()=>{
     await sec.auth().createUserWithEmailAndPassword(email,p);
     await sec.auth().signOut();
   }catch(err){toast('Nu s-a putut crea contul: '+friendlyAuthError(err));return}
-  S.operators.push({name,email,active:true,role});
+  S.operators.push({name,email,active:true,role,mustChangePin:true});
   await Store.saveOperators();
   $('#opNew').value='';$('#opPin').value='';$('#opRole').value='warehouse';toast('Operator adăugat: '+name+' ('+ROLES[role]+')');
 });
@@ -1707,7 +1708,7 @@ $('#opList').addEventListener('click',e=>{
 });
 $('#myPinBtn').addEventListener('click',async()=>{
   const p=$('#myPin').value.trim();if(!/^\d{6}$/.test(p)){toast('PIN-ul trebuie să aibă exact 6 cifre');return}
-  try{await auth.currentUser.updatePassword(p);$('#myPin').value='';toast('PIN schimbat')}catch(err){toast(friendlyAuthError(err))}
+  try{await auth.currentUser.updatePassword(p);$('#myPin').value='';fs.doc('pinstate/'+S.me.email).set({email:S.me.email,uid:auth.currentUser.uid,changedAt:Date.now()}).catch(()=>{});toast('PIN schimbat')}catch(err){toast(friendlyAuthError(err))}
 });
 $('#btnLogout').addEventListener('click',()=>{if(confirm('Ieși din cont pe acest dispozitiv?'))auth.signOut()});
 
@@ -1724,6 +1725,33 @@ function switchTab(t){S.tab=t;if(t==='docs'){docsQuery();setTimeout(renderDocs,0
   ['active','history','schedule','suppliers','settings','gate','kpi','docs'].forEach(k=>$('#tab-'+k).hidden=k!==t);if(t==='schedule'&&!S.schedDay)S.schedDay=opKey(Date.now());if(t==='kpi')setTimeout(renderKpi,0);try{localStorage.setItem('rc_tab',t)}catch(e){}}
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
 
+/* ---------- PIN inițial: schimbare obligatorie la prima conectare ---------- */
+function pinPending(o){return !!(o&&o.mustChangePin&&!(S.pinState[o.email]&&S.pinState[o.email].changedAt))}
+let forcedPinOpen=false;
+function checkForcedPin(){
+  if(!S.me||!auth||!auth.currentUser||forcedPinOpen)return;
+  const me=S.operators.find(o=>o.email===S.me.email);if(!pinPending(me))return;
+  forcedPinOpen=true;
+  openModal(`<div class="bh"><h2>Alege-ți PIN-ul</h2></div>
+    <form id="fpForm"><div class="bb">
+      <p style="margin:0;font-size:14.5px">Bun venit, <b>${esc(me.name)}</b>. PIN-ul primit de la administrator este unul inițial: alege acum un PIN personal de 6 cifre, pe care îl vei folosi de aici încolo. Nu-l da nimănui — tot ce faci în aplicație se înregistrează pe numele tău.</p>
+      <div class="fields"><div class="f"><label>PIN nou (6 cifre)</label><input id="fp1" class="pinfield" inputmode="numeric" maxlength="6" autocomplete="new-password" type="password"></div>
+      <div class="f"><label>Repetă PIN-ul</label><input id="fp2" class="pinfield" inputmode="numeric" maxlength="6" autocomplete="new-password" type="password"></div></div>
+      <p class="muted" id="fpErr" style="margin:0;font-size:12.5px;color:var(--bad)"></p>
+    </div><div class="bf"><button type="button" class="btn ghost sm" id="fpLogout">Ieșire</button><span class="spacer"></span><button type="submit" class="btn primary">Salvează PIN-ul</button></div></form>`);
+  $('#fpLogout').addEventListener('click',()=>{forcedPinOpen=false;closeModal();auth.signOut()});
+  $('#fpForm').addEventListener('submit',async e=>{e.preventDefault();const a=$('#fp1').value.trim(),b=$('#fp2').value.trim(),err=$('#fpErr');
+    if(!/^\d{6}$/.test(a)){err.textContent='PIN-ul trebuie să aibă exact 6 cifre.';return}
+    if(a!==b){err.textContent='Cele două PIN-uri nu coincid.';return}
+    if(a===lastLoginPin){err.textContent='Alege un PIN diferit de cel inițial.';return}
+    if(/^(\d)\1{5}$/.test(a)||'0123456789'.includes(a)||'9876543210'.includes(a)){err.textContent='PIN prea simplu (ex. 111111, 123456). Alege altul.';return}
+    try{await auth.currentUser.updatePassword(a);
+      await fs.doc('pinstate/'+me.email).set({email:me.email,uid:auth.currentUser.uid,changedAt:Date.now()});
+      lastLoginPin='';forcedPinOpen=false;closeModal();toast('PIN salvat. Îl poți schimba oricând din Setări.')}
+    catch(ex){err.textContent=friendlyAuthError(ex)+(ex.code==='auth/requires-recent-login'?' Ieși și conectează-te din nou, apoi alege PIN-ul.':'')}
+  });
+  setTimeout(()=>{const i=$('#fp1');if(i)i.focus()},50);
+}
 /* ---------- modale ---------- */
 function openModal(html){const m=$('#modal');m.innerHTML=`<div class="box" role="dialog" aria-modal="true">${html}</div>`;m.hidden=false;m.scrollTop=0;document.documentElement.classList.add('modal-open');
   const f=m.querySelector('input,select');if(f)setTimeout(()=>f.focus(),30)}
