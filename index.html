@@ -193,6 +193,7 @@ html.modal-open,html.modal-open body{overflow:hidden;overscroll-behavior:none}
 .stat .sub{font-size:11.5px;color:var(--muted);margin-top:2px}.stat.ok .v{color:var(--ok)}.stat.warn .v{color:var(--warn)}.stat.bad .v{color:var(--bad)}
 .kpt{width:100%;border-collapse:collapse;font-size:13px}.kpt th,.kpt td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}.kpt th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--surface2)}.kpt .num{text-align:right;font-variant-numeric:tabular-nums}.kpt tr.we td{color:var(--muted);background:var(--surface2)}.kpt tr.today td{font-weight:600}
 .kpc{width:100%;height:auto;display:block;font-family:var(--sans)}.kpc .bar{fill:var(--accent)}.kpc .bar.under{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1}.kpc .bar.we{fill:var(--line2)}.kpc .tgt{stroke:var(--ink);stroke-width:1.5;stroke-dasharray:5 4}.kpc .ax{stroke:var(--line)}.kpc text{fill:var(--muted);font-size:11px}.kpc .bar:hover{opacity:.8}
+.opgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;margin-bottom:12px}@media (max-width:640px){.opgrid{grid-template-columns:1fr}}.oprow{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);font-size:13px}.oprow .on{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.oprow.off{opacity:.55}.oprow .rosel{font-size:12px;padding:3px 6px}.oprow button{border:none;background:none;cursor:pointer;color:var(--muted);font-size:15px;padding:0 4px}.oprow .rolelbl{font-size:11px;color:var(--muted)}
 .dlist{display:grid;gap:6px}.ditem{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--surface2);border-radius:8px;padding:8px 10px;font-size:13px}.ditem .dn{font-weight:600}.ditem .dm{color:var(--muted);font-size:12px}.dtype{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600}
 .slottag{display:inline-block;margin-top:3px;font-size:11px;font-family:var(--mono);background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:8px}
 .modal .bf{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end}
@@ -451,7 +452,8 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
       <div class="sec">
         <h2>Operatori</h2>
         <p>Persoanele care se pot conecta, fiecare cu un singur rol: <b>Depozit</b> (pornește recepții planificate sau neplanificate, marchează sosirea, corectează și redeschide recepții, adaugă furnizori noi și probleme în catalog), <b>Planificator</b> (introduce, modifică și anulează programări, marchează urgențe; nu atinge recepțiile), <b>Planificator admin</b> (ca planificatorul, în plus stabilește ordinea urgențelor #1, #2…), <b>Vizualizare</b> (vede totul în timp real, filtrează și exportă, nu modifică nimic), <b>Administrator</b> (toate drepturile, inclusiv ștergeri, timpi standard, operatori). <span class="admin-only">Ca administrator poți adăuga operatori (nume + PIN) și îi poți dezactiva. Pentru a reseta PIN-ul altcuiva: dezactivează-l aici, șterge utilizatorul din Firebase Console → Authentication, apoi adaugă-l din nou cu PIN nou.</span></p>
-        <div class="chips" id="opList" style="margin-bottom:10px"></div>
+        <div class="inl" style="margin-bottom:10px"><button class="btn sm" id="opToggle">👥 Arată operatorii</button><span class="muted" style="font-size:12.5px" id="opCount"></span></div>
+        <div class="opgrid" id="opList" hidden></div>
         <div class="inl admin-only"><input id="opNew" placeholder="Nume operator"><input id="opPin" class="pinfield" inputmode="numeric" maxlength="6" placeholder="PIN (6 cifre)"><select id="opRole" class="rosel" style="padding:7px 10px;font-size:14px"><option value="warehouse">Depozit</option><option value="planner">Planificator</option><option value="planner_admin">Planificator admin (urgențe)</option><option value="viewer">Vizualizare</option><option value="gate">Portar (poartă)</option><option value="admin">Administrator</option></select><button class="btn" id="opAdd">Adaugă</button></div>
       </div>
       <div class="sec">
@@ -497,7 +499,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.0.5';
+const APP_VERSION = '3.0.6';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -962,7 +964,9 @@ function renderSuppliers(){
       ${s.remarks?`<div class="rm">${esc(s.remarks)}</div>`:''}</div>`}).join('')||'<div class="empty">Niciun furnizor.</div>';
 }
 function renderSettings(){
-  $('#opList').innerHTML=S.operators.map(o=>{const r=roleOf(o);return `<span class="tag" style="${o.active===false?'opacity:.5':''}">${esc(o.name)}${S.isAdmin?` <select class="rosel" data-oprole="${esc(o.email)}">${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${k===r?'selected':''}>${v}</option>`).join('')}</select>`:` <span class="muted" style="font-size:11px">(${ROLES[r]})</span>`}${o.active===false?' <span class="muted" style="font-size:11px">(dezactivat)</span>':''}${S.isAdmin&&o.email!==S.me.email?`<button data-optoggle="${esc(o.email)}" title="${o.active===false?'Reactivează':'Dezactivează'}">${o.active===false?'↻':'×'}</button>`:''}</span>`}).join('')||'<span class="muted">Niciun operator încă.</span>';
+  const ops=S.operators.slice().sort((a,b)=>(a.active===false)-(b.active===false)||a.name.localeCompare(b.name,'ro'));
+  const nAct=ops.filter(o=>o.active!==false).length;const oc=$('#opCount');if(oc)oc.textContent=nAct+' activi'+(ops.length-nAct?' · '+(ops.length-nAct)+' dezactivați':'');
+  $('#opList').innerHTML=ops.map(o=>{const r=roleOf(o);return `<div class="oprow ${o.active===false?'off':''}"><span class="on" title="${esc(o.name)}">${esc(o.name)}${o.active===false?' <span class="rolelbl">(dezactivat)</span>':''}</span>${S.isAdmin?`<select class="rosel" data-oprole="${esc(o.email)}">${Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${k===r?'selected':''}>${v}</option>`).join('')}</select>`:`<span class="rolelbl">${ROLES[r]}</span>`}${S.isAdmin&&o.email!==S.me.email?`<button data-optoggle="${esc(o.email)}" title="${o.active===false?'Reactivează':'Dezactivează'}">${o.active===false?'↻':'×'}</button>`:''}</div>`}).join('')||'<span class="muted">Niciun operator încă.</span>';
   renderProblemStages();
   $('#prList').innerHTML=S.problems.map(p=>`<span class="tag">${esc(p)}${S.isAdmin?`<button data-prdel="${esc(p)}" title="Șterge">×</button>`:''}</span>`).join('');
   const ds=$('#dayStart');if(ds&&document.activeElement!==ds){ds.innerHTML=Array.from({length:24},(_,h)=>`<option value="${h}" ${h===S.dayStart?'selected':''}>${pad(h)}:00</option>`).join('')}
@@ -1672,6 +1676,7 @@ $('#supList').addEventListener('click',e=>{
 $('#btnAddSup').addEventListener('click',()=>{if(!S.isAdmin){toast('Doar administratorul poate adăuga furnizori aici');return}openSupplierModal(null)});
 
 /* setări: operatori (admin) */
+$('#opToggle').addEventListener('click',()=>{const l=$('#opList');l.hidden=!l.hidden;$('#opToggle').textContent=l.hidden?'👥 Arată operatorii':'👥 Ascunde operatorii'});
 $('#opAdd').addEventListener('click',async()=>{
   const name=$('#opNew').value.trim(),p=$('#opPin').value.trim(),role=$('#opRole').value;
   if(!name){toast('Scrie numele operatorului');return}
