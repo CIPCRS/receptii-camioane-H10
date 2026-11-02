@@ -437,7 +437,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
       <p class="muted" style="font-size:12px;margin-top:10px">Setul de documente scanate al camionului (CMR, aviz, packing list…) se atașează de depozit pe recepție, din Istoric, după terminarea recepției. Fișierele stau în spațiul de stocare al aplicației; „Deschide” le descarcă pe orice dispozitiv.</p>
     </section>
     <section id="tab-kpi" hidden>
-      <div class="gbar"><button class="btn sm" id="kpPrev" title="Luna anterioară">‹</button><h2 style="margin:0" id="kpLabel"></h2><button class="btn sm" id="kpNext" title="Luna următoare">›</button><button class="btn sm" id="kpToday">Luna curentă</button><span class="spacer"></span><span class="muted" style="font-size:12.5px" id="kpInfo"></span></div>
+      <div class="gbar"><button class="btn sm" id="kpPrev" title="Luna anterioară">‹</button><h2 style="margin:0" id="kpLabel"></h2><button class="btn sm" id="kpNext" title="Luna următoare">›</button><button class="btn sm" id="kpToday">Luna curentă</button><span class="spacer"></span><span class="muted" style="font-size:12.5px" id="kpInfo"></span><button class="btn sm" id="kpReportRo" title="Raport lunar cu KPI, grafice și tabele — se deschide în orice browser, se poate salva ca PDF">⤓ Raport KPI (RO)</button><button class="btn sm" id="kpReportEn" title="Același raport, în limba engleză">⤓ Raport KPI (EN)</button></div>
       <div class="stats" id="kpStats"></div>
       <div class="card" style="padding:14px 16px;margin-bottom:14px"><div id="kpChart"></div></div>
       <div class="tablewrap"><table class="kpt"><thead><tr><th>Zi</th><th class="num">Paleți</th><th class="num">Target</th><th class="num">% target</th><th class="num">Camioane</th><th class="num">Paleți / camion</th><th class="num">Durată medie</th><th class="num">În standard</th><th class="num">Cumulat</th></tr></thead><tbody id="kpBody"></tbody></table></div>
@@ -499,7 +499,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.1.0';
+const APP_VERSION = '3.2.0';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -1154,6 +1154,97 @@ function kpiChart(K){
   g+=`<line class="tgt" x1="${padL}" x2="${W-padR}" y1="${y(K.T)}" y2="${y(K.T)}"/><text x="${W-padR}" y="${y(K.T)-5}" text-anchor="end">target ${K.T} / zi</text>`;
   return g+'</svg>';
 }
+/* grafic cumulat: paleți cumulați vs target cumulat (doar zile încheiate) */
+function kpiCumChart(K,L){
+  const W=1000,H=220,padL=52,padR=12,padT=18,padB=30;const days=K.days;const n=days.length;
+  const tgt=[];let tc=0;days.forEach(d=>{tc+=d.target;tgt.push(tc)});
+  const done=days.filter(d=>d.past);const lastCum=done.length?done[done.length-1].cum:0;
+  const rawMax=Math.max(tc,lastCum,1);const step=rawMax>8000?2000:rawMax>3000?1000:500;const maxV=Math.ceil(rawMax/step)*step;
+  const x=i=>padL+(W-padL-padR)*(i+0.5)/n,y=v=>padT+(H-padT-padB)*(1-v/maxV);
+  let g=`<svg class="kpc" viewBox="0 0 ${W} ${H}" role="img" aria-label="${L.cumTitle}">`;
+  for(let t=0;t<=maxV;t+=step)g+=`<line class="ax" x1="${padL}" x2="${W-padR}" y1="${y(t)}" y2="${y(t)}"/><text x="${padL-6}" y="${y(t)+4}" text-anchor="end">${t.toLocaleString('ro-RO')}</text>`;
+  g+=`<polyline class="tgt" fill="none" points="${days.map((d,i)=>x(i)+','+y(tgt[i])).join(' ')}"/>`;
+  if(done.length)g+=`<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="${done.map((d,i)=>x(i)+','+y(d.cum)).join(' ')}"/><circle cx="${x(done.length-1)}" cy="${y(lastCum)}" r="4" fill="var(--accent)"/>`;
+  days.forEach((d,i)=>{if(i%2===0)g+=`<text x="${x(i)}" y="${H-padB+14}" text-anchor="middle">${d.k.slice(8)}</text>`});
+  g+=`<text x="${W-padR}" y="${padT-4}" text-anchor="end">${L.cumLegend}</text>`;
+  return g+'</svg>';
+}
+/* sinteză pe săptămâni (luni–duminică) */
+function kpiWeeks(K){
+  const weeks=[];let cur=null;
+  K.days.forEach(d=>{const dow=new Date(dayKeyToTs(d.k)).getDay();if(!cur||dow===1){cur={from:d.k,to:d.k,pallets:0,target:0,trucks:0,work:0,past:0};weeks.push(cur)}
+    cur.to=d.k;if(d.past||d.pallets>0){cur.pallets+=d.pallets;cur.trucks+=d.trucks}if(d.work&&d.past){cur.target+=K.T;cur.work++;cur.past++}});
+  return weeks.filter(w=>w.past||w.pallets>0);
+}
+const KPI_L={
+  ro:{title:'Raport KPI descărcare camioane',sub:'Paleți descărcați față de target',gen:'Generat',by:'de',month:'Luna',target:'target',perDay:'paleți / zi lucrătoare',workdays:'zile lucrătoare',closed:'încheiate',
+    sPallets:'Paleți descărcați',sTrucks:'camioane',sTargetToDate:'Target la zi',sTargetMonth:'Target lună',sVs:'Realizat vs target',sPal:'paleți',sOverUnder:'Zile peste / sub target',sAvg:'medie',sAvgU:'paleți / zi lucrătoare',sForecast:'Estimare final de lună',sBest:'Cea mai bună zi',sPerTruck:'Paleți / camion',sStd:'Recepții în timpul standard',sAvgDur:'durată medie',
+    chartTitle:'Paleți descărcați pe zile',cumTitle:'Evoluție cumulată în lună',cumLegend:'linie punctată = target cumulat · linie plină = realizat',
+    weekTitle:'Sinteză pe săptămâni',week:'Săptămâna',dayTitle:'Detaliu pe zile',day:'Zi',pallets:'Paleți',targetCol:'Target',pct:'% target',trucks:'Camioane',perTruck:'Paleți / camion',avgDur:'Durată medie',inStd:'În standard',cum:'Cumulat',weekend:'weekend',
+    note:'Paleții numărați ai recepțiilor finalizate, atribuiți zilei operaționale în care s-a încheiat recepția (ziua operațională începe la ora {h}:00). Target pe zi lucrătoare (luni–vineri); sâmbăta și duminica nu au target, dar paleții descărcați atunci se adună la lună. Ziua operațională curentă nu este inclusă până la încheierea ei.',
+    print:'Tipărește / salvează PDF',none:'Nicio recepție finalizată în această lună.',
+    months:MONTHS_RO,dn:['Duminică','Luni','Marți','Miercuri','Joi','Vineri','Sâmbătă']},
+  en:{title:'Truck unloading KPI report',sub:'Pallets unloaded vs target',gen:'Generated',by:'by',month:'Month',target:'target',perDay:'pallets / working day',workdays:'working days',closed:'completed',
+    sPallets:'Pallets unloaded',sTrucks:'trucks',sTargetToDate:'Target to date',sTargetMonth:'Monthly target',sVs:'Achieved vs target',sPal:'pallets',sOverUnder:'Days above / below target',sAvg:'average',sAvgU:'pallets / working day',sForecast:'Month-end forecast',sBest:'Best day',sPerTruck:'Pallets / truck',sStd:'Receptions within standard time',sAvgDur:'average duration',
+    chartTitle:'Pallets unloaded per day',cumTitle:'Cumulative progress in the month',cumLegend:'dashed line = cumulative target · solid line = achieved',
+    weekTitle:'Weekly summary',week:'Week',dayTitle:'Daily detail',day:'Day',pallets:'Pallets',targetCol:'Target',pct:'% target',trucks:'Trucks',perTruck:'Pallets / truck',avgDur:'Avg. duration',inStd:'Within standard',cum:'Cumulative',weekend:'weekend',
+    note:'Counted pallets of completed receptions, assigned to the operational day on which the reception was completed (the operational day starts at {h}:00). Target applies to working days (Monday–Friday); Saturdays and Sundays carry no target, but pallets unloaded then count towards the month. The current operational day is not included until it ends.',
+    print:'Print / save as PDF',none:'No completed receptions in this month.',
+    months:['January','February','March','April','May','June','July','August','September','October','November','December'],dn:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']}
+};
+function kpiReportHtml(K,lang){
+  const L=KPI_L[lang]||KPI_L.ro;const [y,m]=K.mk.split('-');const today=opKey(Date.now());
+  const fd=k=>{const [yy,mm,dd]=k.split('-');return L.dn[new Date(+yy,+mm-1,+dd).getDay()]+' '+dd+'.'+mm+'.'+yy};
+  const num=v=>(+v||0).toLocaleString(lang==='en'?'en-GB':'ro-RO');
+  const pct=K.targetToDate?Math.round(K.total/K.targetToDate*100):null;const cls=pct==null?'':pct>=100?'ok':pct>=90?'warn':'bad';
+  const best=K.days.filter(d=>d.past||d.pallets>0).reduce((a,d)=>!a||d.pallets>a.pallets?d:a,null);
+  const withStd=K.days.reduce((a,d)=>a+d.withStd,0),inStd=K.days.reduce((a,d)=>a+d.inStd,0);
+  const durSum=K.days.reduce((a,d)=>a+(d.avg!=null?d.avg*d.trucks:0),0);
+  const stat=(l,v,sub,c)=>`<div class="stat ${c||''}"><div class="l">${l}</div><div class="v">${v}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`;
+  const stats=stat(L.sPallets,num(K.total),K.trucks+' '+L.sTrucks)+
+    stat(K.isCurrent?L.sTargetToDate:L.sTargetMonth,num(K.targetToDate),K.T+' × '+(K.isCurrent?K.workElapsed:K.workAll)+' '+L.workdays)+
+    stat(L.sVs,pct==null?'—':pct+' %',pct==null?'':(K.total-K.targetToDate>=0?'+':'')+num(K.total-K.targetToDate)+' '+L.sPal,cls)+
+    stat(L.sOverUnder,K.over+' / '+K.under,L.sAvg+' '+Math.round(K.avgWork)+' '+L.sAvgU)+
+    (K.isCurrent?stat(L.sForecast,K.forecast!=null?num(K.forecast):'—',L.sTargetMonth.toLowerCase()+' '+num(K.targetMonth),K.forecast!=null?(K.forecast>=K.targetMonth?'ok':'warn'):''):stat(L.sBest,best?num(best.pallets):'—',best?fd(best.k):''))+
+    stat(L.sPerTruck,K.trucks?Math.round(K.total/K.trucks):'—',K.trucks?L.sAvgDur+' '+fmtMin(durSum/K.trucks):'')+
+    stat(L.sStd,withStd?Math.round(inStd/withStd*100)+' %':'—',withStd?inStd+' / '+withStd:'');
+  const weeks=kpiWeeks(K).map(w=>{const p=w.target?Math.round(w.pallets/w.target*100):null;const pc=p==null?'':p>=100?'ok':p>=90?'warn':'bad';
+    return `<tr><td>${w.from.slice(8)}.${m} – ${w.to.slice(8)}.${m}</td><td class="num"><b>${num(w.pallets)}</b></td><td class="num">${w.target?num(w.target):'—'}</td><td class="num">${p==null?'—':`<span class="pill ${pc}">${p} %</span>`}</td><td class="num">${w.trucks}</td><td class="num">${w.trucks?Math.round(w.pallets/w.trucks):'—'}</td></tr>`}).join('');
+  const rows=K.days.filter(d=>d.past||d.pallets>0).map(d=>{const p=d.pct==null?null:Math.round(d.pct*100);const pc=p==null?'':p>=100?'ok':p>=90?'warn':'bad';
+    return `<tr class="${d.work?'':'we'}"><td>${fd(d.k)}${d.work?'':' <span class="muted">'+L.weekend+'</span>'}</td><td class="num"><b>${d.pallets}</b></td><td class="num">${d.work?d.target:'—'}</td><td class="num">${p==null?'—':`<span class="pill ${pc}">${p} %</span>`}</td><td class="num">${d.trucks}</td><td class="num">${d.trucks?Math.round(d.pallets/d.trucks):'—'}</td><td class="num">${d.avg!=null?fmtMin(d.avg):'—'}</td><td class="num">${d.withStd?Math.round(d.inStd/d.withStd*100)+' %':'—'}</td><td class="num">${num(d.cum)}</td></tr>`}).join('')||`<tr><td colspan="9" class="muted" style="text-align:center;padding:24px">${L.none}</td></tr>`;
+  const css=`:root{--surface:#FFFFFF;--surface2:#EAEEF3;--line:#D6DCE4;--line2:#C3CBD6;--ink:#1A2230;--muted:#7A8594;--accent:#245C9E;--accent-soft:#E3ECF7;--ok:#2E8B57;--ok-soft:#E1F2E8;--warn:#C97A0E;--warn-soft:#FBEED6;--bad:#C4352B;--bad-soft:#F9E1DE;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--mono:ui-monospace,"SF Mono",Consolas,monospace}
+*{box-sizing:border-box}body{font-family:var(--sans);margin:0;padding:28px 32px;color:var(--ink);background:#fff;max-width:1100px;margin:0 auto}h1{font-size:22px;margin:0 0 2px}h2{font-size:15px;margin:28px 0 10px;padding-top:12px;border-top:2px solid var(--accent)}.muted{color:var(--muted);font-size:12px}.head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px}.head .r{text-align:right;font-size:12px;color:var(--muted)}.badge{display:inline-block;background:var(--accent);color:#fff;font-weight:600;font-size:13px;padding:4px 10px;border-radius:6px;margin-top:6px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0 6px}@media(max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}}.stat{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px}.stat .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:500}.stat .v{font-family:var(--mono);font-size:22px;font-weight:500;margin-top:2px;font-variant-numeric:tabular-nums}.stat .sub{font-size:11.5px;color:var(--muted);margin-top:2px}.stat.ok .v{color:var(--ok)}.stat.warn .v{color:var(--warn)}.stat.bad .v{color:var(--bad)}
+.card{border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:10px;background:#fff}.card h3{margin:0 0 6px;font-size:13px;font-weight:600}
+.kpc{width:100%;height:auto;display:block;font-family:var(--sans)}.kpc .bar{fill:var(--accent)}.kpc .bar.under{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1}.kpc .bar.we{fill:var(--line2)}.kpc .tgt{stroke:var(--ink);stroke-width:1.5;stroke-dasharray:5 4}.kpc .ax{stroke:var(--line)}.kpc text{fill:var(--muted);font-size:11px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{padding:6px 9px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--surface2)}.num{text-align:right;font-variant-numeric:tabular-nums}tr.we td{color:var(--muted);background:var(--surface2)}
+.pill{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11.5px;font-weight:600}.pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.warn{background:var(--warn-soft);color:var(--warn)}.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:6px}.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px}
+.pbtn{display:inline-block;margin-top:8px;background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:600 13px var(--sans);cursor:pointer}
+@media print{.pbtn{display:none}body{padding:0}h2{break-after:avoid}.card,.stat,tr{break-inside:avoid}@page{margin:14mm}}`;
+  const legend=`<div class="legend"><span><i style="background:var(--accent)"></i>${lang==='en'?'target reached':'target atins'}</span><span><i style="background:var(--accent-soft);border:1px solid var(--accent)"></i>${lang==='en'?'below target':'sub target'}</span><span><i style="background:var(--line2)"></i>${L.weekend}</span><span><i style="border-top:2px dashed var(--ink);height:0;width:16px;vertical-align:3px"></i>${L.target} ${K.T}</span></div>`;
+  return `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${L.title} · ${L.months[+m-1]} ${y}</title><style>${css}</style></head><body>
+<div class="head"><div><h1>${L.title}</h1><div class="muted">${L.sub} · Hala 10</div><div class="badge">${L.months[+m-1]} ${y}</div></div>
+<div class="r">${L.gen} ${fmtDate(Date.now())} ${fmtTime(Date.now())}${S.me?.name?' '+L.by+' '+esc(S.me.name):''}<br>${K.workAll} ${L.workdays}${K.isCurrent?' · '+K.workElapsed+' '+L.closed:''} · ${L.target} ${K.T} ${L.perDay}<br><button class="pbtn" onclick="window.print()">🖨 ${L.print}</button></div></div>
+<div class="stats">${stats}</div>
+<h2>${L.chartTitle}</h2><div class="card">${kpiChart(K)}${legend}</div>
+<h2>${L.cumTitle}</h2><div class="card">${kpiCumChart(K,L)}</div>
+<h2>${L.weekTitle}</h2><table><thead><tr><th>${L.week}</th><th class="num">${L.pallets}</th><th class="num">${L.targetCol}</th><th class="num">${L.pct}</th><th class="num">${L.trucks}</th><th class="num">${L.perTruck}</th></tr></thead><tbody>${weeks||`<tr><td colspan="6" class="muted" style="text-align:center;padding:16px">${L.none}</td></tr>`}</tbody></table>
+<h2>${L.dayTitle}</h2><table><thead><tr><th>${L.day}</th><th class="num">${L.pallets}</th><th class="num">${L.targetCol}</th><th class="num">${L.pct}</th><th class="num">${L.trucks}</th><th class="num">${L.perTruck}</th><th class="num">${L.avgDur}</th><th class="num">${L.inStd}</th><th class="num">${L.cum}</th></tr></thead><tbody>${rows}</tbody></table>
+<p class="muted" style="margin-top:14px">${L.note.replace('{h}',pad(S.dayStart))}</p>
+</body></html>`;
+}
+function kpiReportDownload(lang){
+  const mk=S.kpiMonth||monthKey(opKey(Date.now()));
+  if(S.kpiExtra['loading:'+mk]){toast('Luna se încarcă încă — încearcă din nou în câteva secunde');return}
+  const K=kpiCompute(mk);const [y,m]=mk.split('-');
+  const html=kpiReportHtml(K,lang);
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'}));
+  a.download=(lang==='en'?'KPI_report_H10_':'Raport_KPI_H10_')+y+'-'+m+'.html';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);
+  toast('Raportul KPI pentru '+MONTHS_RO[+m-1]+' '+y+' a fost descărcat');
+}
+$('#kpReportRo').addEventListener('click',()=>kpiReportDownload('ro'));
+$('#kpReportEn').addEventListener('click',()=>kpiReportDownload('en'));
 function renderKpi(){
   const el=$('#kpBody');if(!el||$('#tab-kpi').hidden)return;
   if(!S.kpiMonth)S.kpiMonth=monthKey(opKey(Date.now()));
@@ -1167,7 +1258,7 @@ function renderKpi(){
     stat(K.isCurrent?'Target la zi':'Target lună',K.targetToDate.toLocaleString('ro-RO'),K.isCurrent?K.T+' × '+K.workElapsed+' zile':K.T+' × '+K.workAll+' zile')+
     stat('Realizat vs target',pct==null?'—':pct+' %',pct==null?'':(K.total-K.targetToDate>=0?'+':'')+(K.total-K.targetToDate).toLocaleString('ro-RO')+' paleți',cls)+
     stat('Zile peste / sub target',K.over+' / '+K.under,'medie '+Math.round(K.avgWork)+' paleți / zi lucrătoare')+
-    (K.isCurrent?stat('Estimare final de lună',K.forecast!=null?K.forecast.toLocaleString('ro-RO'):'—','target lună '+K.targetMonth.toLocaleString('ro-RO'),K.forecast!=null?(K.forecast>=K.targetMonth?'ok':'warn'):''):stat('Target lună',K.targetMonth.toLocaleString('ro-RO'),K.T+' × '+K.workAll+' zile'));
+    (K.isCurrent?stat('Estimare final de lună',K.forecast!=null?K.forecast.toLocaleString('ro-RO'):'—','target lună '+K.targetMonth.toLocaleString('ro-RO'),K.forecast!=null?(K.forecast>=K.targetMonth?'ok':'warn'):''):stat('Cea mai bună zi',(K.days.reduce((a,d)=>d.pallets>a?d.pallets:a,0)).toLocaleString('ro-RO'),(K.days.find(d=>d.pallets===K.days.reduce((a,x)=>Math.max(a,x.pallets),0))||{}).k?fmtDayKey(K.days.find(d=>d.pallets===K.days.reduce((a,x)=>Math.max(a,x.pallets),0)).k):''));
   $('#kpChart').innerHTML=kpiChart(K);
   const today=opKey(Date.now());
   el.innerHTML=K.days.filter(d=>d.past||d.pallets>0).map(d=>{const p=d.pct==null?null:Math.round(d.pct*100);const pc=p==null?'':p>=100?'ok':p>=90?'warn':'bad';
