@@ -378,7 +378,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
         <div class="f"><label>Caută (nr. auto, operator)</label><input type="search" id="fQ" placeholder="ex. B 123 ABC"></div>
         <div class="spacer"></div>
         <label class="inl" style="gap:6px;font-size:13px;white-space:nowrap;padding-bottom:9px"><input type="checkbox" id="fDel" style="min-width:0">Recepții șterse <span class="n" id="nDel" style="display:inline-block;min-width:20px;padding:0 6px;border-radius:10px;background:var(--surface2);font-family:var(--mono);font-size:11px;text-align:center"></span></label>
-        <button class="btn" id="btnExport">⤓ Export CSV (Excel)</button>
+        <button class="btn" id="btnExport" title="Fișier Excel (.xlsx) cu recepțiile filtrate — câte o linie pe camion">⤓ Export Excel</button>
         <button class="btn" id="btnExportHtml" title="Raport cu pozele incluse, se deschide în orice browser">⤓ Raport cu poze (HTML)</button>
       </div>
       <div class="tablewrap">
@@ -499,7 +499,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.2.1';
+const APP_VERSION = '3.3.0';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -1714,22 +1714,78 @@ $('#histBody').addEventListener('change',e=>{
 });
 ['#fFrom','#fTo','#fSup','#fQ','#fDel'].forEach(s=>$(s).addEventListener('input',()=>renderHistory(S.receptions.filter(r=>r.status===($('#fDel').checked?'deleted':'done')))));
 
-/* export CSV (Excel) */
+/* zip fără compresie (STORE) — suficient pentru fișiere mici, fără biblioteci externe */
+const CRC_T=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+function crc32(u8){let c=0xFFFFFFFF;for(let i=0;i<u8.length;i++)c=CRC_T[(c^u8[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0}
+function zipStore(files){ // files: [{name,data:string}]
+  const enc=new TextEncoder(),parts=[],cd=[];let off=0;const d=new Date();
+  const dosT=(d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1),dosD=((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate();
+  const u16=v=>[v&255,(v>>8)&255],u32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255];
+  for(const f of files){const name=enc.encode(f.name),data=enc.encode(f.data),crc=crc32(data);
+    const lh=new Uint8Array([...u32(0x04034b50),...u16(20),...u16(0x800),...u16(0),...u16(dosT),...u16(dosD),...u32(crc),...u32(data.length),...u32(data.length),...u16(name.length),...u16(0),...name]);
+    parts.push(lh,data);
+    cd.push(new Uint8Array([...u32(0x02014b50),...u16(20),...u16(20),...u16(0x800),...u16(0),...u16(dosT),...u16(dosD),...u32(crc),...u32(data.length),...u32(data.length),...u16(name.length),...u16(0),...u16(0),...u16(0),...u16(0),...u32(0),...u32(off),...name]));
+    off+=lh.length+data.length}
+  const cdLen=cd.reduce((a,c)=>a+c.length,0);
+  parts.push(...cd,new Uint8Array([...u32(0x06054b50),...u16(0),...u16(0),...u16(files.length),...u16(files.length),...u32(cdLen),...u32(off),...u16(0)]));
+  return new Blob(parts,{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+const xmlEsc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const colL=n=>{let s='';n++;while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26)}return s};
+const xlDate=ts=>{const d=new Date(ts);return Date.UTC(d.getFullYear(),d.getMonth(),d.getDate(),d.getHours(),d.getMinutes(),d.getSeconds())/86400000+25569};
+const xlDay=k=>{const [y,m,d]=k.split('-').map(Number);return Date.UTC(y,m-1,d)/86400000+25569};
+/* celulă: {v:number|string, f:formula, s:style} → XML */
+function xCell(ref,c){
+  if(c==null)return '';
+  const s=c.s?` s="${c.s}"`:'';
+  if(c.f!=null){const v=c.v==null?'':typeof c.v==='number'?`<v>${c.v}</v>`:`<v>${xmlEsc(c.v)}</v>`;const t=typeof c.v==='string'?(c.v.startsWith('#')?' t="e"':' t="str"'):'';return `<c r="${ref}"${s}${t}><f>${xmlEsc(c.f)}</f>${v}</c>`}
+  if(typeof c.v==='number')return `<c r="${ref}"${s}><v>${c.v}</v></c>`;
+  if(c.v==null||c.v==='')return s?`<c r="${ref}"${s}/>`:'';
+  return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(c.v)}</t></is></c>`;
+}
+function xSheet(rows,opts={}){ // rows: array of arrays of cells
+  const widths=(opts.widths||[]).map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('');
+  const body=rows.map((r,i)=>{const cells=r.map((c,j)=>xCell(colL(j)+(i+1),c)).join('');const ht=opts.heights?.[i+1];return cells?`<row r="${i+1}"${ht?` ht="${ht}" customHeight="1"`:''}>${cells}</row>`:''}).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetViews><sheetView workbookViewId="0"${opts.first?' tabSelected="1"':''}${opts.freeze?'><pane ySplit="'+opts.freeze+'" topLeftCell="A'+(opts.freeze+1)+'" activePane="bottomLeft" state="frozen"/></sheetView':'/'}></sheetViews>${widths?`<cols>${widths}</cols>`:''}<sheetData>${body}</sheetData>${opts.filter?`<autoFilter ref="${opts.filter}"/>`:''}${opts.merges?`<mergeCells count="${opts.merges.length}">${opts.merges.map(m=>`<mergeCell ref="${m}"/>`).join('')}</mergeCells>`:''}${opts.drawing?'<drawing r:id="rId1"/>':''}</worksheet>`;
+}
+const XL_STYLES=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="4"><numFmt numFmtId="164" formatCode="dd.mm.yyyy"/><numFmt numFmtId="165" formatCode="dd.mm.yyyy hh:mm"/><numFmt numFmtId="166" formatCode="#,##0"/><numFmt numFmtId="167" formatCode="0%"/></numFmts><fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="16"/><color rgb="FF245C9E"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF245C9E"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="11">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>
+<xf numFmtId="167" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>
+<xf numFmtId="0" fontId="3" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment wrapText="1" vertical="center"/></xf>
+<xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>
+<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="166" fontId="1" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+<xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>
+</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+// stiluri: 0 normal, 1 bold, 2 dată, 3 procent, 4 antet, 5 număr, 6 titlu, 7 input, 8 bordură, 9 dată+oră, 10 text încadrat
+
+/* export Excel (.xlsx) — generat în browser, fără biblioteci */
 $('#btnExport').addEventListener('click',async()=>{
   const rows=filteredHistory(S.receptions.filter(r=>r.status==='done'));
   if(!rows.length){toast('Nimic de exportat pentru filtrele alese');return}
   const H=['Zi operațională','Schimb','Data calendaristică','Ora start','Ora sfârșit','Slot programat','Intrat în curte','Ieșit din curte','Urgent','Istoric status','Furnizor','Transportator','Proiect','Nr. auto','Operator','Nr. aviz / notă','Paleți programați','Paleți','din care mixați','Diferență paleți','Cutii','Durată totală (min)','Durată calendaristică (min)','Standard (min)','Diferență (min)',...STAGES.map(s=>s.n+' (min)'),'Probleme (pe etape)','Comentarii etape',...STAGE_TABS.map(s=>'Poze '+(s.k===GENERAL?'general':s.n)),'Poze total','Observații'];
-  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const lines=[H.map(q).join(';')];
-  for(const r of rows){const tot=Math.round(totalMs(r)/60000);
-    const sc=r.scheduleId?schedOf(r.scheduleId):null;
-    lines.push([fmtOpDate(r.startedAt),'S'+shiftOf(r.startedAt),fmtDate(r.startedAt),fmtTime(r.startedAt),fmtTime(r.finishedAt),slotOfRec(r)!=null?slotLabel(slotOfRec(r)):'',sc&&sc.gateIn?fmtTime(sc.gateIn):'',sc&&sc.gateOut?fmtTime(sc.gateOut):'',sc&&sc.urgent?'DA'+(sc.urgentRank?' #'+sc.urgentRank:'')+(sc.urgentReason?' – '+sc.urgentReason:''):'',statusTimeline(sc,r).map(e=>fmtTime(e.at)+' '+e.label+(e.note?' ('+e.note+')':'')).join(' → '),r.supplier,r.transport||'',r.project||'',r.plate,r.operator,r.ref,r.plannedPallets,r.pallets,r.mixedPallets??'',r.plannedPallets!=null&&r.pallets!=null?r.pallets-r.plannedPallets:'',r.boxes,tot,Math.round(wallMs(r)/60000),r.stdTotal,r.stdTotal!=null?tot-r.stdTotal:'',
-      ...STAGES.map(s=>Math.round(stageMs(r,s.k)/60000)),problemsSummary(r),notesSummary(r),...photoCounts(r),photoTotal(r),r.note].map(q).join(';'))}
-  const csv='\uFEFF'+lines.join('\r\n');
-  const name='receptii_'+opKey(Date.now())+'.csv';
-  const file=new File([csv],name,{type:'text/csv;charset=utf-8'});
+  const W=[13,7,13,8,8,8,9,9,10,40,22,16,12,12,18,14,9,8,9,9,7,9,10,9,9,...STAGES.map(()=>10),45,45,...STAGE_TABS.map(()=>8),8,30];
+  const D=v=>({v:xlDay(opKey(v)),s:2}),N=v=>v==null||v===''?{v:'',s:8}:{v:+v,s:5},T=v=>({v:v==null?'':String(v),s:8});
+  const data=[H.map(v=>({v,s:4}))];
+  for(const r of rows){const tot=Math.round(totalMs(r)/60000);const sc=r.scheduleId?schedOf(r.scheduleId):null;
+    data.push([{v:xlDay(opKey(r.startedAt)),s:2},T('S'+shiftOf(r.startedAt)),{v:xlDay(dayKey(r.startedAt)),s:2},T(fmtTime(r.startedAt)),T(fmtTime(r.finishedAt)),T(slotOfRec(r)!=null?slotLabel(slotOfRec(r)):''),T(sc&&sc.gateIn?fmtTime(sc.gateIn):''),T(sc&&sc.gateOut?fmtTime(sc.gateOut):''),T(sc&&sc.urgent?'DA'+(sc.urgentRank?' #'+sc.urgentRank:'')+(sc.urgentReason?' – '+sc.urgentReason:''):''),T(statusTimeline(sc,r).map(e=>fmtTime(e.at)+' '+e.label+(e.note?' ('+e.note+')':'')).join(' → ')),T(r.supplier),T(r.transport||''),T(r.project||''),T(r.plate),T(r.operator),T(r.ref),N(r.plannedPallets),N(r.pallets),N(r.mixedPallets),N(r.plannedPallets!=null&&r.pallets!=null?r.pallets-r.plannedPallets:''),N(r.boxes),N(tot),N(Math.round(wallMs(r)/60000)),N(r.stdTotal),N(r.stdTotal!=null?tot-r.stdTotal:''),
+      ...STAGES.map(s=>N(Math.round(stageMs(r,s.k)/60000))),T(problemsSummary(r)),T(notesSummary(r)),...photoCounts(r).map(N),N(photoTotal(r)),T(r.note)])}
+  const files=[
+    {name:'[Content_Types].xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`},
+    {name:'_rels/.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name:'xl/workbook.xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets><sheet name="Recepții" sheetId="1" r:id="rId1"/></sheets></workbook>`},
+    {name:'xl/_rels/workbook.xml.rels',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`},
+    {name:'xl/styles.xml',data:XL_STYLES},
+    {name:'xl/worksheets/sheet1.xml',data:xSheet(data,{widths:W,freeze:1,first:true,filter:'A1:'+colL(H.length-1)+data.length})}];
+  const name='receptii_'+opKey(Date.now())+'.xlsx';
+  const file=new File([zipStore(files)],name,{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file],title:name});return}catch(e){if(e.name==='AbortError')return}}
   const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);
+  toast(rows.length+' recepții exportate în '+name);
 });
 
 /* raport HTML cu poze */
