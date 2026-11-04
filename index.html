@@ -311,6 +311,7 @@ input,select,textarea{font-size:16px}
 .rk button{border:1px solid var(--line2);background:var(--surface);border-radius:5px;width:28px;height:26px;cursor:pointer;font-size:12px;padding:0}
 .rk button:disabled{opacity:.3;cursor:default}
 tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
+.card.urgentcard{box-shadow:inset 4px 0 0 var(--bad)}.card .who h3 .urg{vertical-align:middle;margin-right:4px}
 .st{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:500;white-space:nowrap}
 .st.planned{background:var(--surface2);color:var(--ink2)} .st.onhold{background:var(--warn-soft);color:var(--warn);border:1px dashed var(--warn)}
 .tl{display:grid;gap:4px}
@@ -500,7 +501,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.4.0';
+const APP_VERSION = '3.4.1';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -854,10 +855,10 @@ function renderActive(act){
   const now=Date.now();
   el.innerHTML=act.map(r=>{
     const sup=supOf(r.supplier),std=r.stdTotal??stdTotal(sup),act=activeStages(r),cur=act.length;
-    const tot=totalMs(r,now);
-    return `<article class="card" data-id="${r.id}">
+    const tot=totalMs(r,now);const rsc=r.scheduleId?schedOf(r.scheduleId):null;
+    return `<article class="card ${rsc?.urgent?'urgentcard':''}" data-id="${r.id}">
       <div class="head">
-        <div class="who"><h3>${esc(r.supplier)}</h3><div class="meta">Început ${fmtTime(r.startedAt)} · ${fmtDate(r.startedAt)}${r.operator?' · '+esc(r.operator):''}${slotOfRec(r)!=null?' · programat '+slotLabel(slotOfRec(r)):''}${r.transport?' · '+esc(r.transport):''}</div></div>
+        <div class="who"><h3>${rsc?.urgent?urgentBadge(rsc)+' ':''}${esc(r.supplier)}</h3>${rsc?.urgent&&rsc.urgentReason?`<div class="urgwhy">${esc(rsc.urgentReason)}</div>`:''}<div class="meta">Început ${fmtTime(r.startedAt)} · ${fmtDate(r.startedAt)}${r.operator?' · '+esc(r.operator):''}${slotOfRec(r)!=null?' · programat '+slotLabel(slotOfRec(r)):''}${r.transport?' · '+esc(r.transport):''}</div></div>
         <span class="plate">${esc(r.plate||'—')}</span>
         <div class="timer ${ratioClass(tot/60000,std)}"><div class="t" data-timer-total>${fmtHMS(tot)}</div><div class="std">${std?'standard '+std+' min':'fără timp standard'}<span data-timer-sub>${act.length?' · '+act.map(k=>STAGE_BY[k].n.toLowerCase()).join(' + '):' · nicio etapă activă — cronometrul stă'}</span></div></div>
       </div>
