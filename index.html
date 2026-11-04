@@ -499,7 +499,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.2.0';
+const APP_VERSION = '3.2.1';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -1258,7 +1258,7 @@ function renderKpi(){
     stat(K.isCurrent?'Target la zi':'Target lună',K.targetToDate.toLocaleString('ro-RO'),K.isCurrent?K.T+' × '+K.workElapsed+' zile':K.T+' × '+K.workAll+' zile')+
     stat('Realizat vs target',pct==null?'—':pct+' %',pct==null?'':(K.total-K.targetToDate>=0?'+':'')+(K.total-K.targetToDate).toLocaleString('ro-RO')+' paleți',cls)+
     stat('Zile peste / sub target',K.over+' / '+K.under,'medie '+Math.round(K.avgWork)+' paleți / zi lucrătoare')+
-    (K.isCurrent?stat('Estimare final de lună',K.forecast!=null?K.forecast.toLocaleString('ro-RO'):'—','target lună '+K.targetMonth.toLocaleString('ro-RO'),K.forecast!=null?(K.forecast>=K.targetMonth?'ok':'warn'):''):stat('Cea mai bună zi',(K.days.reduce((a,d)=>d.pallets>a?d.pallets:a,0)).toLocaleString('ro-RO'),(K.days.find(d=>d.pallets===K.days.reduce((a,x)=>Math.max(a,x.pallets),0))||{}).k?fmtDayKey(K.days.find(d=>d.pallets===K.days.reduce((a,x)=>Math.max(a,x.pallets),0)).k):''));
+    (K.isCurrent?stat('Estimare final de lună',K.forecast!=null?K.forecast.toLocaleString('ro-RO'):'—','target lună '+K.targetMonth.toLocaleString('ro-RO'),K.forecast!=null?(K.forecast>=K.targetMonth?'ok':'warn'):''):stat('Cea mai bună zi',K.days.reduce((a,d)=>Math.max(a,d.pallets),0).toLocaleString('ro-RO'),(()=>{const mx=K.days.reduce((a,d)=>Math.max(a,d.pallets),0);const b=K.days.find(d=>d.pallets===mx&&mx>0);return b?fmtDayKey(b.k):''})()));
   $('#kpChart').innerHTML=kpiChart(K);
   const today=opKey(Date.now());
   el.innerHTML=K.days.filter(d=>d.past||d.pallets>0).map(d=>{const p=d.pct==null?null:Math.round(d.pct*100);const pc=p==null?'':p>=100?'ok':p>=90?'warn':'bad';
@@ -1369,8 +1369,8 @@ function openSchedModal(sc){
     <div class="f"><label>Furnizor</label><select id="scSupSel"><option value="">Alege furnizorul…</option>${sups.map(s=>`<option ${s.name===x.supplier?'selected':''}>${esc(s.name)}</option>`).join('')}<option value="__other" ${x.supplier&&!sups.some(s=>s.name===x.supplier)?'selected':''}>✎ Alt furnizor (scrie numele)…</option></select></div>
     <div class="f" id="scSupOtherWrap" ${x.supplier&&!sups.some(s=>s.name===x.supplier)?'':'hidden'}><label>Nume furnizor</label><input id="scSup" value="${esc(x.supplier||'')}" placeholder="ex. nume furnizor nou"></div>
     <div class="fields">
-      <div class="f"><label>Nr. auto</label><input id="scPlate" class="plateIn" value="${esc(x.plate||'')}" placeholder="B 123 ABC / remorcă" autocapitalize="characters"></div>
-      <div class="f"><label>Paleți programați</label><input id="scPal" type="number" min="0" inputmode="numeric" value="${x.plannedPallets??''}"></div>
+      <div class="f"><label>Nr. auto *</label><input id="scPlate" class="plateIn" value="${esc(x.plate||'')}" placeholder="B 123 ABC / remorcă" autocapitalize="characters" required></div>
+      <div class="f"><label>Paleți programați *</label><input id="scPal" type="number" min="0" inputmode="numeric" value="${x.plannedPallets??''}" required></div>
       <div class="f"><label>Transportator</label><input id="scTr" list="dlTr" value="${esc(x.transport||'')}">${dl('dlTr',uniq('transport'))}</div>
       <div class="f"><label>Proiect</label><input id="scPr" list="dlPr" value="${esc(x.project||'')}">${dl('dlPr',uniq('project'))}</div>
       <div class="f"><label>Tip marfă</label><input id="scTy" list="dlTy" value="${esc(x.type||'')}" placeholder="raw material / components / packaging">${dl('dlTy',uniq('type'))}</div>
@@ -1400,6 +1400,8 @@ function openSchedModal(sc){
     location:$('#scLoc').value.trim()||'HALA 10',contact:$('#scCt').value.trim(),incoterms:$('#scInc').value,obs:$('#scObs').value.trim()});
   $('#schedForm').addEventListener('submit',e=>{
     e.preventDefault();const d=read();if(!d.day)return;if(!d.supplier){toast('Alege furnizorul din listă sau scrie-i numele');($('#scSupSel').value==='__other'?$('#scSup'):$('#scSupSel')).focus();return}
+    if(!d.plate){toast('Introdu numărul auto al camionului');$('#scPlate').focus();return}
+    if(d.plannedPallets==null||!(d.plannedPallets>=0)){toast('Introdu numărul de paleți programați');$('#scPal').focus();return}
     const moved=isNew||d.day!==x.day||d.slot!==x.slot;
     if(!S.isAdmin&&moved&&slotIsPast(d.day,d.slot)){toast(d.day<opKey(Date.now())?'Nu se pot face programări pentru zile trecute':'Slotul '+slotLabel(d.slot)+' a trecut deja — alege un slot de la ora curentă încolo sau o zi următoare');$('#scSlot').focus();return}
     if(moved){const t=slotTakenBy(d.day,d.slot,x.id);
