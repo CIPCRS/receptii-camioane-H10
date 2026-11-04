@@ -50,7 +50,7 @@ html{touch-action:manipulation}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased;touch-action:manipulation}
 button,input,select,textarea{font:inherit;color:inherit}
 h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
-.app{max-width:1240px;margin:0 auto;padding:0 20px 60px}
+.app{max-width:1500px;margin:0 auto;padding:0 20px 60px}
 
 /* top bar */
 .top{display:flex;align-items:center;gap:18px;padding:18px 0 12px;flex-wrap:wrap}
@@ -306,6 +306,7 @@ input,select,textarea{font-size:16px}
 .prow.urgent{border-color:var(--bad);box-shadow:inset 3px 0 0 var(--bad)}
 .urg{display:inline-flex;align-items:center;gap:4px;background:var(--bad);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;letter-spacing:.04em;white-space:nowrap}
 .urgwhy{font-size:12.5px;color:var(--bad);margin-top:2px}
+#tab-schedule thead th{white-space:normal;line-height:1.2}#schedBody td:nth-child(2){min-width:160px}#schedBody td.obs{min-width:200px;white-space:normal;font-size:12.5px;line-height:1.35;overflow-wrap:anywhere}#schedBody td:nth-child(8){min-width:100px}#schedBody .rosel{max-width:150px;font-size:12px}#schedBody .plate{white-space:normal;line-height:1.6}
 .rk{display:inline-flex;gap:2px}
 .rk button{border:1px solid var(--line2);background:var(--surface);border-radius:5px;width:28px;height:26px;cursor:pointer;font-size:12px;padding:0}
 .rk button:disabled{opacity:.3;cursor:default}
@@ -408,7 +409,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
       <div class="tablewrap">
         <table>
           <thead><tr>
-            <th>Slot</th><th>Furnizor</th><th>Proiect / Tip</th><th>Transportator</th><th>Nr. auto</th>
+            <th>Slot</th><th>Furnizor</th><th>Proiect / Tip</th><th>Transp.</th><th>Nr. auto</th>
             <th class="num">Paleți prog.</th><th class="num">Paleți reali</th><th>Contact</th><th>Status</th><th>Obs.</th><th></th>
           </tr></thead>
           <tbody id="schedBody"></tbody>
@@ -499,7 +500,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.3.0';
+const APP_VERSION = '3.3.1';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -1343,12 +1344,12 @@ function renderSchedule(){
       <td>${sc.urgent?urgentBadge(sc)+'<br>':''}<b>${esc(sc.supplier||'—')}</b>${sc.urgent&&sc.urgentReason?`<div class="urgwhy">${esc(sc.urgentReason)}</div>`:''}${sc.location&&sc.location!=='HALA 10'?`<div class="muted" style="font-size:11px">${esc(sc.location)}</div>`:''}</td>
       <td>${esc(sc.project||'')}${sc.type?`<div class="muted" style="font-size:12px">${esc(sc.type)}</div>`:''}</td>
       <td>${esc(sc.transport||'—')}</td>
-      <td>${sc.plate?`<span class="plate" style="font-size:12px;padding:2px 6px">${esc(sc.plate)}</span>`:'—'}</td>
+      <td>${sc.plate?`<span class="plate" style="font-size:12px;padding:2px 6px">${esc(sc.plate).replace(/[\/,;]+/g,m=>m+'<wbr>')}</span>`:'—'}</td>
       <td class="num">${sc.plannedPallets??'—'}</td>
       <td class="num">${r&&r.pallets!=null?`${r.pallets}${diff!=null&&diff!==0?` <span class="pill ${diff<0?'warn':'bad'}" style="font-size:11px">${diff>0?'+':''}${diff}</span>`:''}`:'—'}</td>
       <td>${esc(sc.contact||'')}${sc.incoterms?`<div class="muted" style="font-size:11px">${esc(sc.incoterms)}</div>`:''}</td>
       <td>${S.canRecv&&WH_STATUSES.includes(st)?`<select class="rosel" data-sstatus title="Status camion">${WH_STATUSES.map(k=>`<option value="${k}" ${k===st?'selected':''}>${SCHED_STATUS[k]}</option>`).join('')}</select>`:`<span class="st ${st}">${SCHED_STATUS[st]}</span>`}${st==='onhold'&&sc.holdReason?`<div class="muted" style="font-size:11px;color:var(--warn)">${esc(sc.holdReason)}${sc.holdAt?' · '+fmtTime(sc.holdAt):''}</div>`:''}${st==='cancelled'&&sc.cancelledBy?`<div class="muted" style="font-size:11px">de ${esc(sc.cancelledBy)} · ${fmtDate(sc.cancelledAt)} ${fmtTime(sc.cancelledAt)}</div>`:''}${sc.gateIn?`<div style="margin-top:3px">${gateTag(sc)}</div>`:''}${sc.arrivedAt?`<div class="muted mono" style="font-size:11px">sosit ${fmtTime(sc.arrivedAt)}</div>`:''}${r?`<div class="muted mono" style="font-size:11px">${fmtTime(r.startedAt)}${r.finishedAt?'–'+fmtTime(r.finishedAt):''}</div>`:''}</td>
-      <td style="max-width:220px;font-size:12.5px">${esc(sc.obs||'')}</td>
+      <td class="obs">${esc(sc.obs||'')}</td>
       <td style="white-space:nowrap">${S.canRecv&&['planned','arrived','onhold'].includes(st)?`<button class="btn sm ok" data-sact="start" title="Pornește recepția">▶</button> `:''}${S.canPlan?`<button class="btn sm" data-sact="edit" title="Editează">✎</button>`:''}</td>
     </tr>`}).join('');
 }
