@@ -126,7 +126,7 @@ h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.
 
 /* fields */
 .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-.f{display:grid;gap:4px}
+.f{display:grid;gap:4px;align-content:start}
 .f label{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:500}
 .f input,.f select,.f textarea{border:1px solid var(--line2);border-radius:6px;padding:8px 10px;background:var(--surface);width:100%}
 .f input[type=number]{font-family:var(--mono);font-variant-numeric:tabular-nums}
@@ -501,7 +501,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.6.0';
+const APP_VERSION = '3.6.1';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -1381,9 +1381,10 @@ function openSchedModal(sc){
     <div class="f"><label>Furnizor</label><select id="scSupSel"><option value="">Alege furnizorul…</option>${sups.map(s=>`<option ${s.name===x.supplier?'selected':''}>${esc(s.name)}</option>`).join('')}<option value="__other" ${x.supplier&&!sups.some(s=>s.name===x.supplier)?'selected':''}>✎ Alt furnizor (scrie numele)…</option></select></div>
     <div class="f" id="scSupOtherWrap" ${x.supplier&&!sups.some(s=>s.name===x.supplier)?'':'hidden'}><label>Nume furnizor</label><input id="scSup" value="${esc(x.supplier||'')}" placeholder="ex. nume furnizor nou"></div>
     <div class="fields">
-      <div class="f"><label>Nr. auto *</label><input id="scPlate" class="plateIn" value="${esc(x.plate||'')}" placeholder="B123ABC sau AG56MLG/AG84MLG" autocapitalize="characters" ${x.plateUnknown?'disabled':''}><div class="pref">fără spații; cap tractor și remorcă separate prin /</div><label class="inl" style="gap:6px;font-size:12.5px;text-transform:none;letter-spacing:0;color:var(--ink);margin-top:4px"><input type="checkbox" id="scPlateUnk" ${x.plateUnknown?'checked':''} style="min-width:0;width:16px;height:16px"> Nr. auto necunoscut momentan — îl completează depozitul la sosire</label></div>
+      <div class="f"><label>Nr. auto *</label><input id="scPlate" class="plateIn" value="${esc(x.plate||'')}" placeholder="B123ABC" autocapitalize="characters" ${x.plateUnknown?'disabled':''}><div class="pref">fără spații; cap tractor / remorcă</div></div>
       <div class="f"><label>Paleți programați *</label><input id="scPal" type="number" min="0" inputmode="numeric" value="${x.plannedPallets??''}" required></div>
       <div class="f"><label>Transportator</label><input id="scTr" list="dlTr" value="${esc(x.transport||'')}">${dl('dlTr',uniq('transport'))}</div>
+      <label style="grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);margin:-4px 0 2px;cursor:pointer"><input type="checkbox" id="scPlateUnk" ${x.plateUnknown?'checked':''} style="min-width:0;width:16px;height:16px"> Nr. auto necunoscut momentan — îl completează depozitul când sosește camionul</label>
       <div class="f"><label>Proiect</label><input id="scPr" list="dlPr" value="${esc(x.project||'')}">${dl('dlPr',uniq('project'))}</div>
       <div class="f"><label>Tip marfă</label><input id="scTy" list="dlTy" value="${esc(x.type||'')}" placeholder="raw material / components / packaging">${dl('dlTy',uniq('type'))}</div>
       <div class="f"><label>Loc descărcare</label><input id="scLoc" value="${esc(x.location||'HALA 10')}"></div>
