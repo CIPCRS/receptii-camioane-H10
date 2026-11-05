@@ -501,7 +501,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.4.1';
+const APP_VERSION = '3.5.0';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -1008,8 +1008,9 @@ function timelineHtml(sc,rec){const ev=statusTimeline(sc,rec);if(!ev.length)retu
   return `<div class="f"><label>Istoric status camion</label><div class="tl">${ev.map(e=>`<div class="tle"><span class="mono">${fmtDate(e.at)} ${fmtTime(e.at)}</span><span class="st ${e.gate?(e.gate==='in'?'gate-in':'gate-out'):(Object.keys(SCHED_STATUS).find(k=>SCHED_STATUS[k]===e.label)||'planned')}">${esc(e.label)}</span><span class="muted">${esc(e.by||'')}</span>${e.note?`<span class="tln">${esc(e.note)}</span>`:''}</div>`).join('')}</div></div>`}
 function slotLabel(h){return pad(h)+':00'}
 function urgKey(sc){return sc.urgent?(sc.urgentRank||9999):Infinity}
-function prioritySort(a,b){if(!!a.urgent!==!!b.urgent)return a.urgent?-1:1;const d=a.day.localeCompare(b.day);if(d)return d;if(a.urgent){const ua=urgKey(a),ub=urgKey(b);if(ua!==ub)return ua-ub}return slotOrder(a.slot)-slotOrder(b.slot)}
-function urgentBadge(sc){return sc.urgent?`<span class="urg">⚠ URGENT${sc.urgentRank?' #'+sc.urgentRank:''}</span>`:''}
+function prioritySort(a,b){if(!!a.urgent!==!!b.urgent)return a.urgent?-1:1;const d=a.day.localeCompare(b.day);if(d)return d;if(a.urgent){const ua=urgKey(a),ub=urgKey(b);if(ua!==ub)return ua-ub;const ta=a.urgentAt||0,tb=b.urgentAt||0;if(ta!==tb)return ta-tb}return slotOrder(a.slot)-slotOrder(b.slot)}
+function urgentPos(sc){if(!sc.urgent)return null;const i=urgentList(sc.day).findIndex(x=>x.id===sc.id);return i>=0?i+1:(sc.urgentRank||null)}
+function urgentBadge(sc){if(!sc.urgent)return '';const n=urgentPos(sc);return `<span class="urg">⚠ URGENT${n?' #'+n:''}</span>`}
 /* slotul a trecut deja? (doar pentru ziua operațională curentă sau zile trecute) */
 /* slotul este deja ocupat de o programare neanulată (alta decât cea editată)? */
 function slotTakenBy(day,slot,excludeId){return allSched().find(x=>x.day===day&&x.slot===slot&&x.status!=='cancelled'&&x.id!==excludeId)||null}
@@ -1419,8 +1420,9 @@ function openSchedModal(sc){
     const obj=isNew?{id:'s'+uid(),status:'planned',createdAt:Date.now(),createdBy:S.me?.name||S.me?.email||'?',statusLog:[{s:'planned',at:Date.now(),by:S.me?.name||'?'}],...d}:{...x,...d};
     if(!isNew&&$('#scSt')&&$('#scSt').value!==x.status){logStatus(obj,$('#scSt').value,$('#scSt').value==='onhold'?($('#scHoldWhy')?.value||'').trim():undefined)}
     if(urg){if(!obj.urgent){obj.urgentAt=Date.now();obj.urgentBy=S.me?.name||'?'}obj.urgent=true;obj.urgentReason=why;
-      const rk=$('#scUrgRank');if(S.canRank&&rk&&rk.value!=='')obj.urgentRank=+rk.value;}
-    else{obj.urgent=false;obj.urgentReason='';if(S.canRank)obj.urgentRank=null;}
+      const rk=$('#scUrgRank');if(S.canRank&&rk&&rk.value!=='')obj.urgentRank=+rk.value;
+      if(!obj.urgentRank){obj.urgentRank=urgentList(obj.day).filter(z=>z.id!==obj.id).reduce((m,z)=>Math.max(m,z.urgentRank||0),0)+1}}   // urgență nouă: intră la coada listei zilei, în ordinea programării
+    else{obj.urgent=false;obj.urgentReason='';obj.urgentRank=null;}
     Store.saveSched(obj);
     if(urg&&S.canRank){const rk=$('#scUrgRank');setUrgentRank(obj,rk&&rk.value!==''?+rk.value:(obj.urgentRank||9999))}
     if(S.canRank&&!isNew&&x.urgent&&(x.day!==obj.day||!urg))renumberUrgent(x.day,obj.id);S.schedDay=d.day;closeModal();renderSchedule();toast(isNew?'Programare adăugată':'Programare salvată');
