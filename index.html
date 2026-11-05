@@ -302,7 +302,8 @@ input,select,textarea{font-size:16px}
 .prow .pmain b{font-size:15px}
 .prow .pmeta{font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap;margin-top:2px}
 .prow .pact{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-.prow.late{border-color:var(--warn)}
+.prow.late{border-color:var(--bad)}
+.st.late{background:var(--bad);color:#fff;font-weight:700}
 .prow.urgent{border-color:var(--bad);box-shadow:inset 3px 0 0 var(--bad)}
 .urg{display:inline-flex;align-items:center;gap:4px;background:var(--bad);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;letter-spacing:.04em;white-space:nowrap}
 .urgwhy{font-size:12.5px;color:var(--bad);margin-top:2px}
@@ -503,7 +504,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.9.0';
+const APP_VERSION = '3.10.1';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -711,6 +712,8 @@ function onLogin(user){
   applyRoles();
   $('#login').hidden=true;$('#app').hidden=false;
   subscribe();setTimeout(checkForcedPin,800);
+  clearInterval(lateTimer);lateTimer=setInterval(checkLate,30000);setTimeout(checkLate,2500);
+  if(S.canPlan&&'Notification' in window&&Notification.permission==='default'){try{Notification.requestPermission()}catch(_){}}
 }
 function applyRoles(){
   if(!S.me)return;
@@ -732,6 +735,7 @@ function applyRoles(){
   if(S.isAdmin&&S.rolesMissing){S.rolesMissing=false;Store.saveOperators()}
 }
 function onLogout(){
+  clearInterval(lateTimer);lateTimer=null;lateKnown=new Set();if($('#lateAck'))closeModal();
   unsubs.forEach(u=>u());unsubs=[];Object.values(S.photoSubs).forEach(u=>u());S.photoSubs={};S.photos={};Object.values(S.docSubs).forEach(u=>u());S.docSubs={};S.docs={};S.openRow=null;if(S.docListUnsub){S.docListUnsub();S.docListUnsub=null}S.docList=[];S.receptions=[];S.ready=false;chosenOp=null;pin='';
   $('#app').hidden=true;$('#login').hidden=false;
   loadPublicOperators().then(renderLogin);
@@ -1022,6 +1026,29 @@ function urgentBadge(sc){if(!sc.urgent)return '';const n=urgentPos(sc);return `<
 /* slotul a trecut deja? (doar pentru ziua operațională curentă sau zile trecute) */
 /* slotul este deja ocupat de o programare neanulată (alta decât cea editată)? */
 function slotTakenBy(day,slot,excludeId){return allSched().find(x=>x.day===day&&x.slot===slot&&x.status!=='cancelled'&&x.id!==excludeId)||null}
+/* întârziere: programat, netrecut pe la poartă și nemarcat sosit, iar ora slotului a trecut */
+const LATE_LABEL='Întârziat – nu a sosit la ora programării';
+function slotStartTs(day,slot){return dayKeyToTs(day)-12*3600000+slot*3600000+(slot<S.dayStart?24*3600000:0)}
+function isLate(sc){return schedStatus(sc)==='planned'&&!sc.gateIn&&!sc.arrivedAt&&Date.now()>slotStartTs(sc.day,sc.slot)}
+function statusPill(sc,st,size){return isLate(sc)?`<span class="st late" ${size?'style="font-size:11px"':''} title="Ora slotului a trecut fără intrare pe poartă / sosire la depozit">${LATE_LABEL}</span>`:`<span class="st ${st}" ${size?'style="font-size:11px"':''}>${SCHED_STATUS[st]}</span>`}
+/* alerta planificatorului: camioanele lui care au întârziat — banner roșu + sunet, cât timp are aplicația deschisă */
+let lateTimer=null,lateKnown=new Set();
+function lateSeen(){try{return new Set(JSON.parse(localStorage.getItem('lateSeen')||'[]'))}catch(_){return new Set()}}
+function beep(){try{const ac=new (window.AudioContext||window.webkitAudioContext)();[0,.25,.5].forEach(t=>{const o=ac.createOscillator(),g=ac.createGain();o.type='square';o.frequency.value=880;g.gain.setValueAtTime(.0001,ac.currentTime+t);g.gain.exponentialRampToValueAtTime(.25,ac.currentTime+t+.02);g.gain.exponentialRampToValueAtTime(.0001,ac.currentTime+t+.2);o.connect(g).connect(ac.destination);o.start(ac.currentTime+t);o.stop(ac.currentTime+t+.22)});setTimeout(()=>ac.close(),1500)}catch(_){}}
+function myLate(){if(!S.canPlan)return [];return allSched().filter(sc=>sc.urgent&&isLate(sc)&&ownsSched(sc)).sort(prioritySort)}   // doar camioanele urgente ale planificatorului
+function checkLate(){
+  const mine=myLate();const seen=lateSeen();const show=mine.filter(sc=>!seen.has(sc.id));
+  if(!show.length)return;
+  const open=!$('#modal').hidden;if(open&&!$('#lateAck'))return;        // nu întrerupem o fereastră deschisă — reîncercăm la următoarea verificare
+  const fresh=show.filter(sc=>!lateKnown.has(sc.id));show.forEach(sc=>lateKnown.add(sc.id));
+  if(fresh.length){beep();try{if('Notification' in window&&Notification.permission==='granted')new Notification('Camion urgent întârziat',{body:fresh.map(sc=>sc.supplier+' · slot '+slotLabel(sc.slot)+(sc.plate?' · '+sc.plate:'')).join('\n')})}catch(_){}}
+  if(open&&!fresh.length)return;                                         // fereastra de alertă e deja afișată cu aceleași camioane
+  openModal(`<div class="bh" style="background:var(--bad);color:#fff;border-radius:12px 12px 0 0"><h2 style="color:#fff">⚠ Camion urgent întârziat</h2></div>
+   <div class="bb">${show.map(sc=>`<div class="plan-hint" style="border-color:var(--bad);background:var(--bad-soft)"><b style="color:var(--bad)">${urgentBadge(sc)} ${esc(sc.supplier||'—')} · slot ${slotLabel(sc.slot)}${sc.day!==opKey(Date.now())?' · '+fmtDayKey(sc.day):''}</b><span>${sc.plate?'Nr. auto '+esc(sc.plate)+' · ':''}${LATE_LABEL} — nu a fost marcat nici la poartă, nici sosit la depozit.</span>${sc.urgentReason?`<span>${esc(sc.urgentReason)}</span>`:''}</div>`).join('')}
+   <p class="muted" style="margin:0;font-size:12.5px">Alerta apare o singură dată pe acest dispozitiv, doar pentru camioanele urgente programate de tine. Statusul roșu rămâne în liste până când camionul este marcat intrat sau sosit.</p></div>
+   <div class="bf"><span class="spacer"></span><button type="button" class="btn primary" id="lateAck" style="background:var(--bad);border-color:var(--bad)">✔ Am citit</button></div>`);
+  $('#lateAck').addEventListener('click',()=>{const sn=lateSeen();show.forEach(sc=>sn.add(sc.id));try{localStorage.setItem('lateSeen',JSON.stringify([...sn].slice(-300)))}catch(_){}closeModal()});
+}
 function slotIsPast(day,slot){const today=opKey(Date.now());if(day<today)return true;if(day>today)return false;const n=new Date();return slotOrder(slot)<slotOrder(n.getHours())}
 function urgentList(day){return allSched().filter(x=>x.urgent&&(!day||x.day===day)&&['planned','arrived','receiving'].includes(schedStatus(x))).sort(prioritySort)}
 function renumberUrgent(day,excludeId){urgentList(day).filter(x=>x.id!==excludeId).forEach((x,i)=>{if(x.urgentRank!==i+1){x.urgentRank=i+1;Store.saveSched(x)}})}
@@ -1332,7 +1359,7 @@ function renderGate(){
     return `<div class="prow ${g==='out'?'gone':''} ${sc.urgent?'urgent':''}" data-sched="${sc.id}">
       <div class="slot">${slotLabel(sc.slot)}${sc.day!==today?`<div class="muted" style="font-size:10px;font-family:var(--sans)">${sc.day.slice(8)}.${sc.day.slice(5,7)}</div>`:''}</div>
       <div class="pmain"><b>${esc(sc.supplier||'—')}</b> ${plateCell(sc,true)}${sc.plateConfirmedAt?`<span class="muted" style="font-size:11px;margin-left:6px">✔ nr. confirmat ${esc(sc.plateConfirmedBy||'')} ${fmtTime(sc.plateConfirmedAt)}</span>`:''}
-        <div class="pmeta">${sc.transport?`<span>${esc(sc.transport)}</span>`:''}<span class="st ${st}" style="font-size:11px">${SCHED_STATUS[st]}</span>${gateTag(sc)}${sc.urgent?'<span style="color:var(--bad)">urgent</span>':''}</div></div>
+        <div class="pmeta">${sc.transport?`<span>${esc(sc.transport)}</span>`:''}${statusPill(sc,st,true)}${gateTag(sc)}${sc.urgent?'<span style="color:var(--bad)">urgent</span>':''}</div></div>
       <div class="pact">${!g?`<button class="btn sm ok" data-gact="in">Intrat în curte</button>`:''}${g==='in'?`<button class="btn sm primary" data-gact="out">Ieșit din curte</button>`:''}${g&&(own||S.isAdmin)?`<button class="btn ghost sm" data-gact="undo" title="Anulează ultima marcare">anulează</button>`:''}</div>
     </div>`}).join('');
 }
@@ -1347,19 +1374,20 @@ function renderPlanned(){
   const now=new Date();const curSlot=slotOrder(now.getHours()+now.getMinutes()/60);
   el.innerHTML=`<h2>Camioane programate, de descărcat <span style="background:var(--accent-soft);color:var(--accent);padding:0 7px;border-radius:10px;font-family:var(--mono)">${open.length}</span></h2>`+
    open.sort(prioritySort).map((sc,idx,arr)=>{
-    const st=schedStatus(sc);const late=sc.day<today||(sc.day===today&&slotOrder(sc.slot)+1<curSlot&&st==='planned');
+    const st=schedStatus(sc);const late=isLate(sc);
     const dayU=arr.filter(x=>x.urgent&&x.day===sc.day);const uIdx=dayU.findIndex(x=>x.id===sc.id);
     return `<div class="prow ${late?'late':''} ${sc.urgent?'urgent':''} ${st==='onhold'?'onhold':''}" data-sched="${sc.id}">
       <div class="slot">${slotLabel(sc.slot)}${sc.day<today?`<div class="muted" style="font-size:10px;font-family:var(--sans)">${sc.day.slice(8)}.${sc.day.slice(5,7)}</div>`:''}</div>
       <div class="pmain">${urgentBadge(sc)} <b>${esc(sc.supplier||'—')}</b> ${plateCell(sc,true)}
         ${sc.urgent&&sc.urgentReason?`<div class="urgwhy">${esc(sc.urgentReason)}</div>`:''}${st==='onhold'&&sc.holdReason?`<div class="urgwhy" style="color:var(--warn)">On hold: ${esc(sc.holdReason)}</div>`:''}
-        <div class="pmeta">${gateTag(sc)}<span>Paleți programați: <b>${sc.plannedPallets??'—'}</b></span>${sc.transport?`<span>${esc(sc.transport)}</span>`:''}${sc.project?`<span>${esc(sc.project)}${sc.type?' · '+esc(sc.type):''}</span>`:''}${sc.contact?`<span>contact ${esc(sc.contact)}</span>`:''}${sc.obs?`<span style="color:var(--warn)">${esc(sc.obs)}</span>`:''}${late?'<span style="color:var(--warn)">întârziat</span>':''}</div></div>
+        <div class="pmeta">${late?statusPill(sc,st,true):''}${gateTag(sc)}<span>Paleți programați: <b>${sc.plannedPallets??'—'}</b></span>${sc.transport?`<span>${esc(sc.transport)}</span>`:''}${sc.project?`<span>${esc(sc.project)}${sc.type?' · '+esc(sc.type):''}</span>`:''}${sc.contact?`<span>contact ${esc(sc.contact)}</span>`:''}${sc.obs?`<span style="color:var(--warn)">${esc(sc.obs)}</span>`:''}</div></div>
       <div class="pact">${S.canRank&&sc.urgent?`<span class="rk"><button type="button" data-sact="up" title="Mai sus în urgențele zilei" ${uIdx<=0?'disabled':''}>▲</button><button type="button" data-sact="down" title="Mai jos în urgențele zilei" ${uIdx>=dayU.length-1?'disabled':''}>▼</button></span>`:''}${S.canRecv?`<select class="rosel" data-sstatus title="Status camion">${WH_STATUSES.map(k=>`<option value="${k}" ${k===st?'selected':''}>${SCHED_STATUS[k]}${k==='arrived'&&st==='arrived'&&sc.arrivedAt?' '+fmtTime(sc.arrivedAt):''}</option>`).join('')}</select>`:`<span class="st ${st}">${SCHED_STATUS[st]}${st==='arrived'&&sc.arrivedAt?' '+fmtTime(sc.arrivedAt):''}</span>`}
         ${S.canRecv?`<button class="btn sm ok" data-sact="start">▶ Pornește recepția</button>`:''}</div>
     </div>`}).join('');
 }
 
 function renderSchedule(){
+  if(S.ready&&lateTimer)checkLate();
   if(!S.schedDay)S.schedDay=opKey(Date.now());
   const day=S.schedDay,today=opKey(Date.now());
   const inp=$('#sdDate');if(inp&&document.activeElement!==inp)inp.value=day;
@@ -1383,7 +1411,7 @@ function renderSchedule(){
       <td class="num">${sc.plannedPallets??'—'}</td>
       <td class="num">${r&&r.pallets!=null?`${r.pallets}${diff!=null&&diff!==0?` <span class="pill ${diff<0?'warn':'bad'}" style="font-size:11px">${diff>0?'+':''}${diff}</span>`:''}`:'—'}</td>
       <td>${esc(sc.contact||'')}${sc.incoterms?`<div class="muted" style="font-size:11px">${esc(sc.incoterms)}</div>`:''}</td>
-      <td>${S.canRecv&&WH_STATUSES.includes(st)?`<select class="rosel" data-sstatus title="Status camion">${WH_STATUSES.map(k=>`<option value="${k}" ${k===st?'selected':''}>${SCHED_STATUS[k]}</option>`).join('')}</select>`:`<span class="st ${st}">${SCHED_STATUS[st]}</span>`}${st==='onhold'&&sc.holdReason?`<div class="muted" style="font-size:11px;color:var(--warn)">${esc(sc.holdReason)}${sc.holdAt?' · '+fmtTime(sc.holdAt):''}</div>`:''}${st==='cancelled'&&sc.cancelledBy?`<div class="muted" style="font-size:11px">de ${esc(sc.cancelledBy)} · ${fmtDate(sc.cancelledAt)} ${fmtTime(sc.cancelledAt)}</div>`:''}${sc.gateIn?`<div style="margin-top:3px">${gateTag(sc)}</div>`:''}${sc.arrivedAt?`<div class="muted mono" style="font-size:11px">sosit ${fmtTime(sc.arrivedAt)}</div>`:''}${r?`<div class="muted mono" style="font-size:11px">${fmtTime(r.startedAt)}${r.finishedAt?'–'+fmtTime(r.finishedAt):''}</div>`:''}</td>
+      <td>${S.canRecv&&WH_STATUSES.includes(st)?`<select class="rosel" data-sstatus title="Status camion">${WH_STATUSES.map(k=>`<option value="${k}" ${k===st?'selected':''}>${SCHED_STATUS[k]}</option>`).join('')}</select>`+(isLate(sc)?'<div style="margin-top:3px">'+statusPill(sc,st,true)+'</div>':''):statusPill(sc,st)}${st==='onhold'&&sc.holdReason?`<div class="muted" style="font-size:11px;color:var(--warn)">${esc(sc.holdReason)}${sc.holdAt?' · '+fmtTime(sc.holdAt):''}</div>`:''}${st==='cancelled'&&sc.cancelledBy?`<div class="muted" style="font-size:11px">de ${esc(sc.cancelledBy)} · ${fmtDate(sc.cancelledAt)} ${fmtTime(sc.cancelledAt)}</div>`:''}${sc.gateIn?`<div style="margin-top:3px">${gateTag(sc)}</div>`:''}${sc.arrivedAt?`<div class="muted mono" style="font-size:11px">sosit ${fmtTime(sc.arrivedAt)}</div>`:''}${r?`<div class="muted mono" style="font-size:11px">${fmtTime(r.startedAt)}${r.finishedAt?'–'+fmtTime(r.finishedAt):''}</div>`:''}</td>
       <td class="obs">${esc(sc.obs||'')}</td>
       <td style="white-space:nowrap">${S.canRecv&&['planned','arrived','onhold'].includes(st)?`<button class="btn sm ok" data-sact="start" title="Pornește recepția">▶</button> `:''}${S.canPlan?(canEditSched(sc)?`<button class="btn sm" data-sact="edit" title="Editează">✎</button>`:`<span class="muted" title="Programată de ${esc(sc.createdBy||'alt planificator')} — doar el sau planificatorul admin o pot modifica" style="font-size:14px;cursor:help">🔒</span>`):''}</td>
     </tr>`}).join('');
