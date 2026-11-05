@@ -501,7 +501,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.5.0';
+const APP_VERSION = '3.6.0';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -1009,6 +1009,10 @@ function timelineHtml(sc,rec){const ev=statusTimeline(sc,rec);if(!ev.length)retu
 function slotLabel(h){return pad(h)+':00'}
 function urgKey(sc){return sc.urgent?(sc.urgentRank||9999):Infinity}
 function prioritySort(a,b){if(!!a.urgent!==!!b.urgent)return a.urgent?-1:1;const d=a.day.localeCompare(b.day);if(d)return d;if(a.urgent){const ua=urgKey(a),ub=urgKey(b);if(ua!==ub)return ua-ub;const ta=a.urgentAt||0,tb=b.urgentAt||0;if(ta!==tb)return ta-tb}return slotOrder(a.slot)-slotOrder(b.slot)}
+function plateCell(sc,small){const miss=!sc.plate;const fix=sc.plate&&sc.platePlanned&&sc.platePlanned!==sc.plate;const filled=sc.plate&&sc.platePlanned==='';
+  const badge=miss?`<span class="pill warn" style="font-family:var(--sans);font-weight:600">NR. AUTO LIPSĂ</span>`:String(sc.plate).split(/\s*[\/,;]\s*/).filter(Boolean).map(x=>`<span class="plate" style="font-size:12px;padding:2px 6px${small?';margin-left:6px':''}">${esc(x)}</span>`).join(small?' ':'<br>');
+  const note=fix?`<div class="muted" style="font-size:11px;color:var(--warn)">corectat de depozit${sc.platePlanned?' (programat '+esc(sc.platePlanned)+')':''}</div>`:(filled?`<div class="muted" style="font-size:11px;color:var(--warn)">completat de depozit</div>`:'');
+  return badge+note}
 function urgentPos(sc){if(!sc.urgent)return null;const i=urgentList(sc.day).findIndex(x=>x.id===sc.id);return i>=0?i+1:(sc.urgentRank||null)}
 function urgentBadge(sc){if(!sc.urgent)return '';const n=urgentPos(sc);return `<span class="urg">⚠ URGENT${n?' #'+n:''}</span>`}
 /* slotul a trecut deja? (doar pentru ziua operațională curentă sau zile trecute) */
@@ -1323,7 +1327,7 @@ function renderPlanned(){
     const dayU=arr.filter(x=>x.urgent&&x.day===sc.day);const uIdx=dayU.findIndex(x=>x.id===sc.id);
     return `<div class="prow ${late?'late':''} ${sc.urgent?'urgent':''} ${st==='onhold'?'onhold':''}" data-sched="${sc.id}">
       <div class="slot">${slotLabel(sc.slot)}${sc.day<today?`<div class="muted" style="font-size:10px;font-family:var(--sans)">${sc.day.slice(8)}.${sc.day.slice(5,7)}</div>`:''}</div>
-      <div class="pmain">${urgentBadge(sc)} <b>${esc(sc.supplier||'—')}</b> ${sc.plate?`<span class="plate" style="font-size:12px;padding:2px 6px;margin-left:6px">${esc(sc.plate)}</span>`:''}
+      <div class="pmain">${urgentBadge(sc)} <b>${esc(sc.supplier||'—')}</b> ${plateCell(sc,true)}
         ${sc.urgent&&sc.urgentReason?`<div class="urgwhy">${esc(sc.urgentReason)}</div>`:''}${st==='onhold'&&sc.holdReason?`<div class="urgwhy" style="color:var(--warn)">On hold: ${esc(sc.holdReason)}</div>`:''}
         <div class="pmeta">${gateTag(sc)}<span>Paleți programați: <b>${sc.plannedPallets??'—'}</b></span>${sc.transport?`<span>${esc(sc.transport)}</span>`:''}${sc.project?`<span>${esc(sc.project)}${sc.type?' · '+esc(sc.type):''}</span>`:''}${sc.contact?`<span>contact ${esc(sc.contact)}</span>`:''}${sc.obs?`<span style="color:var(--warn)">${esc(sc.obs)}</span>`:''}${late?'<span style="color:var(--warn)">întârziat</span>':''}</div></div>
       <div class="pact">${S.canRank&&sc.urgent?`<span class="rk"><button type="button" data-sact="up" title="Mai sus în urgențele zilei" ${uIdx<=0?'disabled':''}>▲</button><button type="button" data-sact="down" title="Mai jos în urgențele zilei" ${uIdx>=dayU.length-1?'disabled':''}>▼</button></span>`:''}${S.canRecv?`<select class="rosel" data-sstatus title="Status camion">${WH_STATUSES.map(k=>`<option value="${k}" ${k===st?'selected':''}>${SCHED_STATUS[k]}${k==='arrived'&&st==='arrived'&&sc.arrivedAt?' '+fmtTime(sc.arrivedAt):''}</option>`).join('')}</select>`:`<span class="st ${st}">${SCHED_STATUS[st]}${st==='arrived'&&sc.arrivedAt?' '+fmtTime(sc.arrivedAt):''}</span>`}
@@ -1351,7 +1355,7 @@ function renderSchedule(){
       <td>${sc.urgent?urgentBadge(sc)+'<br>':''}<b>${esc(sc.supplier||'—')}</b>${sc.urgent&&sc.urgentReason?`<div class="urgwhy">${esc(sc.urgentReason)}</div>`:''}${sc.location&&sc.location!=='HALA 10'?`<div class="muted" style="font-size:11px">${esc(sc.location)}</div>`:''}</td>
       <td>${esc(sc.project||'')}${sc.type?`<div class="muted" style="font-size:12px">${esc(sc.type)}</div>`:''}</td>
       <td>${esc(sc.transport||'—')}</td>
-      <td>${sc.plate?String(sc.plate).split(/\s*[\/,;]\s*/).filter(Boolean).map(x=>`<span class="plate" style="font-size:12px;padding:2px 6px">${esc(x)}</span>`).join('<br>'):'—'}</td>
+      <td>${plateCell(sc)}</td>
       <td class="num">${sc.plannedPallets??'—'}</td>
       <td class="num">${r&&r.pallets!=null?`${r.pallets}${diff!=null&&diff!==0?` <span class="pill ${diff<0?'warn':'bad'}" style="font-size:11px">${diff>0?'+':''}${diff}</span>`:''}`:'—'}</td>
       <td>${esc(sc.contact||'')}${sc.incoterms?`<div class="muted" style="font-size:11px">${esc(sc.incoterms)}</div>`:''}</td>
@@ -1377,7 +1381,7 @@ function openSchedModal(sc){
     <div class="f"><label>Furnizor</label><select id="scSupSel"><option value="">Alege furnizorul…</option>${sups.map(s=>`<option ${s.name===x.supplier?'selected':''}>${esc(s.name)}</option>`).join('')}<option value="__other" ${x.supplier&&!sups.some(s=>s.name===x.supplier)?'selected':''}>✎ Alt furnizor (scrie numele)…</option></select></div>
     <div class="f" id="scSupOtherWrap" ${x.supplier&&!sups.some(s=>s.name===x.supplier)?'':'hidden'}><label>Nume furnizor</label><input id="scSup" value="${esc(x.supplier||'')}" placeholder="ex. nume furnizor nou"></div>
     <div class="fields">
-      <div class="f"><label>Nr. auto *</label><input id="scPlate" class="plateIn" value="${esc(x.plate||'')}" placeholder="B123ABC sau AG56MLG/AG84MLG" autocapitalize="characters" required><div class="pref">fără spații; cap tractor și remorcă separate prin /</div></div>
+      <div class="f"><label>Nr. auto *</label><input id="scPlate" class="plateIn" value="${esc(x.plate||'')}" placeholder="B123ABC sau AG56MLG/AG84MLG" autocapitalize="characters" ${x.plateUnknown?'disabled':''}><div class="pref">fără spații; cap tractor și remorcă separate prin /</div><label class="inl" style="gap:6px;font-size:12.5px;text-transform:none;letter-spacing:0;color:var(--ink);margin-top:4px"><input type="checkbox" id="scPlateUnk" ${x.plateUnknown?'checked':''} style="min-width:0;width:16px;height:16px"> Nr. auto necunoscut momentan — îl completează depozitul la sosire</label></div>
       <div class="f"><label>Paleți programați *</label><input id="scPal" type="number" min="0" inputmode="numeric" value="${x.plannedPallets??''}" required></div>
       <div class="f"><label>Transportator</label><input id="scTr" list="dlTr" value="${esc(x.transport||'')}">${dl('dlTr',uniq('transport'))}</div>
       <div class="f"><label>Proiect</label><input id="scPr" list="dlPr" value="${esc(x.project||'')}">${dl('dlPr',uniq('project'))}</div>
@@ -1401,14 +1405,15 @@ function openSchedModal(sc){
    <div class="bf" style="flex-wrap:wrap">${!isNew&&x.status!=='cancelled'?`<button type="button" class="btn danger sm" id="scCancel">Anulează programarea</button>`:''}${!isNew&&x.status==='cancelled'?`<button type="button" class="btn sm" id="scRestore">↩ Reactivează</button>`:''}${!isNew&&S.isAdmin?`<button type="button" class="btn danger sm" id="scDelete" title="Dispare definitiv din baza de date">Șterge definitiv</button>`:''}<span class="spacer"></span><button type="button" class="btn" data-close>Renunță</button><button type="submit" class="btn primary">Salvează</button></div></form>`);
   const scSt=$('#scSt');if(scSt)scSt.addEventListener('change',e=>{const w=$('#scHoldWrap');if(w)w.hidden=e.target.value!=='onhold'});
   $('#scUrg').addEventListener('change',e=>{$('#scUrgWrap').hidden=!e.target.checked;if(e.target.checked)$('#scUrgWhy').focus()});
+  $('#scPlateUnk').addEventListener('change',e=>{$('#scPlate').disabled=e.target.checked;if(e.target.checked)$('#scPlate').value='';else $('#scPlate').focus()});
   $('#scDay').addEventListener('change',()=>{const d=$('#scDay').value;$('#scSlot').querySelectorAll('option').forEach(o=>{const h=+o.value;const past=!S.isAdmin&&slotIsPast(d,h);const t=taken(d,h);o.disabled=!S.isAdmin&&(past||t)&&!(h===x.slot&&d===x.day);o.textContent=slotLabel(h)+(past?' (trecut)':'')+(t?' (ocupat – '+(t.supplier||'camion')+')':'')})});
   $('#scSupSel').addEventListener('change',e=>{const oth=e.target.value==='__other';$('#scSupOtherWrap').hidden=!oth;if(oth){$('#scSup').value='';$('#scSup').focus()}});
-  const read=()=>({day:$('#scDay').value,slot:+$('#scSlot').value,supplier:($('#scSupSel').value==='__other'?$('#scSup').value:$('#scSupSel').value).trim(),plate:normPlate($('#scPlate').value),
+  const read=()=>({day:$('#scDay').value,slot:+$('#scSlot').value,supplier:($('#scSupSel').value==='__other'?$('#scSup').value:$('#scSupSel').value).trim(),plate:$('#scPlateUnk').checked?'':normPlate($('#scPlate').value),plateUnknown:$('#scPlateUnk').checked,
     plannedPallets:$('#scPal').value===''?null:+$('#scPal').value,transport:$('#scTr').value.trim(),project:$('#scPr').value.trim(),type:$('#scTy').value.trim(),
     location:$('#scLoc').value.trim()||'HALA 10',contact:$('#scCt').value.trim(),incoterms:$('#scInc').value,obs:$('#scObs').value.trim()});
   $('#schedForm').addEventListener('submit',e=>{
     e.preventDefault();const d=read();if(!d.day)return;if(!d.supplier){toast('Alege furnizorul din listă sau scrie-i numele');($('#scSupSel').value==='__other'?$('#scSup'):$('#scSupSel')).focus();return}
-    {const pe=plateError(d.plate);if(pe){toast(pe);$('#scPlate').focus();return}}
+    if(!d.plateUnknown){const pe=plateError(d.plate);if(pe){toast(pe);$('#scPlate').focus();return}}
     if(d.plannedPallets==null||!(d.plannedPallets>=0)){toast('Introdu numărul de paleți programați');$('#scPal').focus();return}
     const moved=isNew||d.day!==x.day||d.slot!==x.slot;
     if(!S.isAdmin&&moved&&slotIsPast(d.day,d.slot)){toast(d.day<opKey(Date.now())?'Nu se pot face programări pentru zile trecute':'Slotul '+slotLabel(d.slot)+' a trecut deja — alege un slot de la ora curentă încolo sau o zi următoare');$('#scSlot').focus();return}
@@ -1443,11 +1448,11 @@ function startFromSchedule(sc){
   const meName=S.me?.name||'';
   openModal(`<div class="bh"><h2>Pornește recepția</h2><span class="spacer"></span><button class="btn ghost sm" data-close>✕</button></div>
    <form id="startForm"><div class="bb">
-    <div class="plan-hint"><b>${esc(sc.supplier)} · slot ${slotLabel(sc.slot)}</b><span>Nr. auto programat: <b>${esc(sc.plate||'—')}</b> · Paleți programați: <b>${sc.plannedPallets??'—'}</b>${sc.transport?' · '+esc(sc.transport):''}</span>${sc.obs?`<span>${esc(sc.obs)}</span>`:''}</div>
+    <div class="plan-hint"><b>${esc(sc.supplier)} · slot ${slotLabel(sc.slot)}</b><span>Nr. auto programat: <b>${sc.plate?esc(sc.plate):'necunoscut — completează-l de pe camion'}</b> · Paleți programați: <b>${sc.plannedPallets??'—'}</b>${sc.transport?' · '+esc(sc.transport):''}</span>${sc.obs?`<span>${esc(sc.obs)}</span>`:''}</div>
     <div class="f"><label>Furnizor (pentru timpii standard)</label><select id="nSup" required><option value="">Alege furnizorul…</option>${sups.map(s=>`<option ${match&&s.name===match.name?'selected':''}>${esc(s.name)}</option>`).join('')}<option value="__new">＋ Furnizor nou…</option></select></div>
     <div class="f" id="nSupNewWrap" hidden><label>Nume furnizor nou</label><input id="nSupNew" value="${esc(sc.supplier||'')}"></div>
     <div class="fields">
-      <div class="f"><label>Nr. auto (confirmă)</label><input id="nPlate" class="plateIn" value="${esc(sc.plate||'')}" autocapitalize="characters"></div>
+      <div class="f"><label>Nr. auto văzut pe camion *</label><input id="nPlate" class="plateIn" value="${esc(sc.plate||'')}" placeholder="${sc.plate?'':'ex. B123ABC'}" autocapitalize="characters" required><label class="inl" style="gap:6px;font-size:12.5px;text-transform:none;letter-spacing:0;color:var(--ink);margin-top:4px"><input type="checkbox" id="nPlateOk" style="min-width:0;width:16px;height:16px"> <b>Am verificat numărul pe camion</b>${sc.plate?' (corectează-l dacă diferă)':''}</label></div>
       <div class="f"><label>Operator</label><select id="nOp"><option value="">—</option>${opNames().map(o=>`<option ${o===meName?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
     </div>
     <p class="muted" style="margin:0;font-size:12.5px">Numărul de paleți programat este doar orientativ: după numărare, introdu <b>numărul real</b> pe cardul recepției. Fără el recepția nu poate fi terminată.</p>
@@ -1458,7 +1463,11 @@ function startFromSchedule(sc){
     e.preventDefault();let sup=$('#nSup').value;
     if(sup==='__new'){sup=$('#nSupNew').value.trim();if(!sup)return;if(!supOf(sup)){S.suppliers.push({name:sup,std:{unload:null,check:null,receipt:null,label:null,quality:null,rack:null},remarks:''});Store.saveSuppliers()}}
     if(!sup){$('#nSup').focus();return}
-    newReception({supplier:sup,plate:normPlate($('#nPlate').value),operator:$('#nOp').value,pallets:null,scheduleId:sc.id,plannedSlot:sc.slot,plannedDay:sc.day,plannedPallets:sc.plannedPallets??null,transport:sc.transport||'',project:sc.project||''});
+    const plate=normPlate($('#nPlate').value);const pe=plateError(plate);if(pe){toast(pe);$('#nPlate').focus();return}
+    if(!$('#nPlateOk').checked){toast('Bifează că ai verificat numărul auto pe camion — recepția nu pornește fără confirmare');$('#nPlateOk').focus();return}
+    const planned=sc.plate||'';
+    newReception({supplier:sup,plate,platePlanned:planned,operator:$('#nOp').value,pallets:null,scheduleId:sc.id,plannedSlot:sc.slot,plannedDay:sc.day,plannedPallets:sc.plannedPallets??null,transport:sc.transport||'',project:sc.project||''});
+    if(planned!==plate){sc.platePlanned=planned;sc.plate=plate}sc.plateUnknown=false;sc.plateConfirmedBy=S.me?.name||'?';sc.plateConfirmedAt=Date.now();
     if(!sc.arrivedAt)sc.arrivedAt=Date.now();logStatus(sc,'receiving');Store.saveSched(sc);
     closeModal();switchTab('active');
   });
@@ -1662,7 +1671,7 @@ function confirmFinish(rec){
 }
 function newReception(d){
   const now=Date.now(),sup=supOf(d.supplier);
-  const rec={id:'r'+uid(),supplier:d.supplier,plate:d.plate,operator:d.operator,pallets:d.pallets,boxes:null,ref:'',note:'',problems:[],
+  const rec={id:'r'+uid(),supplier:d.supplier,plate:d.plate,platePlanned:d.platePlanned??null,operator:d.operator,pallets:d.pallets,boxes:null,ref:'',note:'',problems:[],
     status:'active',startedAt:now,finishedAt:null,stdTotal:stdTotal(sup),segments:[],timing:'active',createdBy:S.me?.email||null,
     scheduleId:d.scheduleId||null,plannedSlot:d.plannedSlot??null,plannedDay:d.plannedDay||null,plannedPallets:d.plannedPallets??null,transport:d.transport||'',project:d.project||''};
   startStage(rec,(stagesFor(sup)[0]||STAGES[0]).k,now);
@@ -1776,12 +1785,12 @@ const XL_STYLES=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSh
 $('#btnExport').addEventListener('click',async()=>{
   const rows=filteredHistory(S.receptions.filter(r=>r.status==='done'));
   if(!rows.length){toast('Nimic de exportat pentru filtrele alese');return}
-  const H=['Zi operațională','Schimb','Data calendaristică','Ora start','Ora sfârșit','Slot programat','Intrat în curte','Ieșit din curte','Urgent','Istoric status','Furnizor','Transportator','Proiect','Nr. auto','Operator','Nr. aviz / notă','Paleți programați','Paleți','din care mixați','Diferență paleți','Cutii','Durată totală (min)','Durată calendaristică (min)','Standard (min)','Diferență (min)',...STAGES.map(s=>s.n+' (min)'),'Probleme (pe etape)','Comentarii etape',...STAGE_TABS.map(s=>'Poze '+(s.k===GENERAL?'general':s.n)),'Poze total','Observații'];
-  const W=[13,7,13,8,8,8,9,9,10,40,22,16,12,12,18,14,9,8,9,9,7,9,10,9,9,...STAGES.map(()=>10),45,45,...STAGE_TABS.map(()=>8),8,30];
+  const H=['Zi operațională','Schimb','Data calendaristică','Ora start','Ora sfârșit','Slot programat','Intrat în curte','Ieșit din curte','Urgent','Istoric status','Furnizor','Transportator','Proiect','Nr. auto','Nr. auto programat','Nr. auto corectat','Operator','Nr. aviz / notă','Paleți programați','Paleți','din care mixați','Diferență paleți','Cutii','Durată totală (min)','Durată calendaristică (min)','Standard (min)','Diferență (min)',...STAGES.map(s=>s.n+' (min)'),'Probleme (pe etape)','Comentarii etape',...STAGE_TABS.map(s=>'Poze '+(s.k===GENERAL?'general':s.n)),'Poze total','Observații'];
+  const W=[13,7,13,8,8,8,9,9,10,40,22,16,12,14,14,10,18,14,9,8,9,9,7,9,10,9,9,...STAGES.map(()=>10),45,45,...STAGE_TABS.map(()=>8),8,30];
   const D=v=>({v:xlDay(opKey(v)),s:2}),N=v=>v==null||v===''?{v:'',s:8}:{v:+v,s:5},T=v=>({v:v==null?'':String(v),s:8});
   const data=[H.map(v=>({v,s:4}))];
   for(const r of rows){const tot=Math.round(totalMs(r)/60000);const sc=r.scheduleId?schedOf(r.scheduleId):null;
-    data.push([{v:xlDay(opKey(r.startedAt)),s:2},T('S'+shiftOf(r.startedAt)),{v:xlDay(dayKey(r.startedAt)),s:2},T(fmtTime(r.startedAt)),T(fmtTime(r.finishedAt)),T(slotOfRec(r)!=null?slotLabel(slotOfRec(r)):''),T(sc&&sc.gateIn?fmtTime(sc.gateIn):''),T(sc&&sc.gateOut?fmtTime(sc.gateOut):''),T(sc&&sc.urgent?'DA'+(sc.urgentRank?' #'+sc.urgentRank:'')+(sc.urgentReason?' – '+sc.urgentReason:''):''),T(statusTimeline(sc,r).map(e=>fmtTime(e.at)+' '+e.label+(e.note?' ('+e.note+')':'')).join(' → ')),T(r.supplier),T(r.transport||''),T(r.project||''),T(r.plate),T(r.operator),T(r.ref),N(r.plannedPallets),N(r.pallets),N(r.mixedPallets),N(r.plannedPallets!=null&&r.pallets!=null?r.pallets-r.plannedPallets:''),N(r.boxes),N(tot),N(Math.round(wallMs(r)/60000)),N(r.stdTotal),N(r.stdTotal!=null?tot-r.stdTotal:''),
+    data.push([{v:xlDay(opKey(r.startedAt)),s:2},T('S'+shiftOf(r.startedAt)),{v:xlDay(dayKey(r.startedAt)),s:2},T(fmtTime(r.startedAt)),T(fmtTime(r.finishedAt)),T(slotOfRec(r)!=null?slotLabel(slotOfRec(r)):''),T(sc&&sc.gateIn?fmtTime(sc.gateIn):''),T(sc&&sc.gateOut?fmtTime(sc.gateOut):''),T(sc&&sc.urgent?'DA'+(sc.urgentRank?' #'+sc.urgentRank:'')+(sc.urgentReason?' – '+sc.urgentReason:''):''),T(statusTimeline(sc,r).map(e=>fmtTime(e.at)+' '+e.label+(e.note?' ('+e.note+')':'')).join(' → ')),T(r.supplier),T(r.transport||''),T(r.project||''),T(r.plate),T(r.platePlanned??''),T(r.platePlanned==null?'':r.platePlanned===r.plate?'NU':r.platePlanned?'DA':'completat'),T(r.operator),T(r.ref),N(r.plannedPallets),N(r.pallets),N(r.mixedPallets),N(r.plannedPallets!=null&&r.pallets!=null?r.pallets-r.plannedPallets:''),N(r.boxes),N(tot),N(Math.round(wallMs(r)/60000)),N(r.stdTotal),N(r.stdTotal!=null?tot-r.stdTotal:''),
       ...STAGES.map(s=>N(Math.round(stageMs(r,s.k)/60000))),T(problemsSummary(r)),T(notesSummary(r)),...photoCounts(r).map(N),N(photoTotal(r)),T(r.note)])}
   const files=[
     {name:'[Content_Types].xml',data:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`},
