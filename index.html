@@ -503,7 +503,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.8.0';
+const APP_VERSION = '3.9.0';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -811,6 +811,7 @@ const Store = {
     sc.updatedAt=Date.now();sc.updatedBy=S.me?.name||S.me?.email||'?';
     S.schedules=S.schedules.map(x=>x.id===sc.id?sc:x);S.schedExtra=S.schedExtra.map(x=>x.id===sc.id?sc:x);scheduleRender();
     const d={gateIn:sc.gateIn??null,gateInBy:sc.gateInBy??null,gateOut:sc.gateOut??null,gateOutBy:sc.gateOutBy??null,gateLog:sc.gateLog||[],updatedAt:sc.updatedAt,updatedBy:sc.updatedBy};
+    if(sc.plateConfirmedWhere==='gate'){d.plate=sc.plate||'';d.platePlanned=sc.platePlanned??null;d.plateUnknown=false;d.plateConfirmedBy=sc.plateConfirmedBy||null;d.plateConfirmedAt=sc.plateConfirmedAt||null;d.plateConfirmedWhere='gate'}
     fs.doc('schedules/'+sc.id).update(d).catch(e=>toast(e.code==='permission-denied'?'Nu ai drept să marchezi poarta':'Eroare la salvare: '+(e.message||e)));
   }
 };
@@ -1013,7 +1014,8 @@ function urgKey(sc){return sc.urgent?(sc.urgentRank||9999):Infinity}
 function prioritySort(a,b){if(!!a.urgent!==!!b.urgent)return a.urgent?-1:1;const d=a.day.localeCompare(b.day);if(d)return d;if(a.urgent){const ua=urgKey(a),ub=urgKey(b);if(ua!==ub)return ua-ub;const ta=a.urgentAt||0,tb=b.urgentAt||0;if(ta!==tb)return ta-tb}return slotOrder(a.slot)-slotOrder(b.slot)}
 function plateCell(sc,small){const miss=!sc.plate;const fix=sc.plate&&sc.platePlanned&&sc.platePlanned!==sc.plate;const filled=sc.plate&&sc.platePlanned==='';
   const badge=miss?`<span class="pill warn" style="font-family:var(--sans);font-weight:600">NR. AUTO LIPSĂ</span>`:String(sc.plate).split(/\s*[\/,;]\s*/).filter(Boolean).map(x=>`<span class="plate" style="font-size:12px;padding:2px 6px${small?';margin-left:6px':''}">${esc(x)}</span>`).join(small?' ':'<br>');
-  const note=fix?`<div class="muted" style="font-size:11px;color:var(--warn)">corectat de depozit${sc.platePlanned?' (programat '+esc(sc.platePlanned)+')':''}</div>`:(filled?`<div class="muted" style="font-size:11px;color:var(--warn)">completat de depozit</div>`:'');
+  const who=sc.plateConfirmedWhere==='gate'?'la poartă':'de depozit';
+  const note=fix?`<div class="muted" style="font-size:11px;color:var(--warn)">corectat ${who}${sc.platePlanned?' (programat '+esc(sc.platePlanned)+')':''}</div>`:(filled?`<div class="muted" style="font-size:11px;color:var(--warn)">completat ${who}</div>`:'');
   return badge+note}
 function urgentPos(sc){if(!sc.urgent)return null;const i=urgentList(sc.day).findIndex(x=>x.id===sc.id);return i>=0?i+1:(sc.urgentRank||null)}
 function urgentBadge(sc){if(!sc.urgent)return '';const n=urgentPos(sc);return `<span class="urg">⚠ URGENT${n?' #'+n:''}</span>`}
@@ -1286,10 +1288,29 @@ $('#kpToday').addEventListener('click',()=>{S.kpiMonth=monthKey(opKey(Date.now()
 /* ---------- poartă (portar): intrat / ieșit din curte ---------- */
 function gateState(sc){return sc.gateOut?'out':(sc.gateIn?'in':'')}
 function gateTag(sc){const g=gateState(sc);if(!g)return '';return `<span class="gtag ${g}" title="Marcat de ${esc(g==='in'?sc.gateInBy||'':sc.gateOutBy||'')}">${g==='in'?'în curte '+fmtTime(sc.gateIn):'ieșit '+fmtTime(sc.gateOut)}</span>`}
-function gateAction(sc,a){
+/* poarta: la „Intrat în curte” portarul confirmă sau corectează numărul auto de pe camion */
+function gateInModal(sc){
+  openModal(`<div class="bh"><h2>Intrat în curte</h2><span class="spacer"></span><button class="btn ghost sm" data-close>✕</button></div>
+   <form id="gateInForm"><div class="bb">
+    <div class="plan-hint"><b>${esc(sc.supplier||'—')} · slot ${slotLabel(sc.slot)}</b><span>Nr. auto programat: <b>${sc.plate?esc(sc.plate):'necunoscut — completează-l de pe camion'}</b>${sc.transport?' · '+esc(sc.transport):''}</span></div>
+    <div class="f"><label>Nr. auto văzut pe camion *</label><input id="gPlate" class="plateIn" value="${esc(sc.plate||'')}" placeholder="${sc.plate?'':'ex. B123ABC'}" autocapitalize="characters" required style="font-size:18px">
+      <div class="pref">fără spații; cap tractor și remorcă separate prin /</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;text-transform:none;letter-spacing:0;color:var(--ink);margin-top:6px;cursor:pointer"><input type="checkbox" id="gPlateOk" style="min-width:0;width:18px;height:18px"> <b>Am verificat numărul pe camion</b>${sc.plate?' (corectează-l dacă diferă)':''}</label></div>
+   </div>
+   <div class="bf"><button type="button" class="btn" data-close>Renunță</button><button type="submit" class="btn primary ok">✔ Intrat în curte</button></div></form>`);
+  setTimeout(()=>$('#gPlate').focus(),50);
+  $('#gateInForm').addEventListener('submit',e=>{
+    e.preventDefault();const plate=normPlate($('#gPlate').value);const pe=plateError(plate);if(pe){toast(pe);$('#gPlate').focus();return}
+    if(!$('#gPlateOk').checked){toast('Bifează că ai verificat numărul auto pe camion');$('#gPlateOk').focus();return}
+    const planned=sc.plate||'';if(planned!==plate){sc.platePlanned=planned;sc.plate=plate}
+    sc.plateUnknown=false;sc.plateConfirmedBy=S.me?.name||'?';sc.plateConfirmedAt=Date.now();sc.plateConfirmedWhere='gate';
+    closeModal();gateAction(sc,'in',{skipModal:true});
+  });
+}
+function gateAction(sc,a,opts={}){
   if(!S.canGate){toast('Doar portarul (sau administratorul) marchează intrarea/ieșirea');return}
   const me=S.me?.name||S.me?.email||'?';sc.gateLog=sc.gateLog||[];
-  if(a==='in'){if(sc.gateIn){toast('Camionul este deja marcat intrat');return}sc.gateIn=Date.now();sc.gateInBy=me;sc.gateLog.push({t:'in',at:sc.gateIn,by:me})}
+  if(a==='in'){if(sc.gateIn){toast('Camionul este deja marcat intrat');return}if(!opts.skipModal){gateInModal(sc);return}sc.gateIn=Date.now();sc.gateInBy=me;sc.gateLog.push({t:'in',at:sc.gateIn,by:me})}
   else if(a==='out'){if(!sc.gateIn){toast('Marchează întâi intrarea în curte');return}if(sc.gateOut){toast('Camionul este deja marcat ieșit');return}sc.gateOut=Date.now();sc.gateOutBy=me;sc.gateLog.push({t:'out',at:sc.gateOut,by:me})}
   else if(a==='undo'){
     if(sc.gateOut){if(sc.gateOutBy!==me&&!S.isAdmin){toast('Poți anula doar propria apăsare');return}sc.gateLog.push({t:'undo_out',at:Date.now(),by:me,was:sc.gateOut});sc.gateOut=null;sc.gateOutBy=null}
@@ -1310,7 +1331,7 @@ function renderGate(){
   el.innerHTML=rows.map(sc=>{const st=schedStatus(sc),g=gateState(sc);const own=g==='out'?sc.gateOutBy===me:sc.gateInBy===me;
     return `<div class="prow ${g==='out'?'gone':''} ${sc.urgent?'urgent':''}" data-sched="${sc.id}">
       <div class="slot">${slotLabel(sc.slot)}${sc.day!==today?`<div class="muted" style="font-size:10px;font-family:var(--sans)">${sc.day.slice(8)}.${sc.day.slice(5,7)}</div>`:''}</div>
-      <div class="pmain"><b>${esc(sc.supplier||'—')}</b> ${sc.plate?`<span class="plate" style="font-size:13px;padding:2px 7px;margin-left:6px">${esc(sc.plate)}</span>`:'<span class="muted" style="font-size:12px;margin-left:6px">fără nr. auto</span>'}
+      <div class="pmain"><b>${esc(sc.supplier||'—')}</b> ${plateCell(sc,true)}${sc.plateConfirmedAt?`<span class="muted" style="font-size:11px;margin-left:6px">✔ nr. confirmat ${esc(sc.plateConfirmedBy||'')} ${fmtTime(sc.plateConfirmedAt)}</span>`:''}
         <div class="pmeta">${sc.transport?`<span>${esc(sc.transport)}</span>`:''}<span class="st ${st}" style="font-size:11px">${SCHED_STATUS[st]}</span>${gateTag(sc)}${sc.urgent?'<span style="color:var(--bad)">urgent</span>':''}</div></div>
       <div class="pact">${!g?`<button class="btn sm ok" data-gact="in">Intrat în curte</button>`:''}${g==='in'?`<button class="btn sm primary" data-gact="out">Ieșit din curte</button>`:''}${g&&(own||S.isAdmin)?`<button class="btn ghost sm" data-gact="undo" title="Anulează ultima marcare">anulează</button>`:''}</div>
     </div>`}).join('');
@@ -1456,7 +1477,7 @@ function startFromSchedule(sc){
     <div class="f"><label>Furnizor (pentru timpii standard)</label><select id="nSup" required><option value="">Alege furnizorul…</option>${sups.map(s=>`<option ${match&&s.name===match.name?'selected':''}>${esc(s.name)}</option>`).join('')}<option value="__new">＋ Furnizor nou…</option></select></div>
     <div class="f" id="nSupNewWrap" hidden><label>Nume furnizor nou</label><input id="nSupNew" value="${esc(sc.supplier||'')}"></div>
     <div class="fields">
-      <div class="f"><label>Nr. auto văzut pe camion *</label><input id="nPlate" class="plateIn" value="${esc(sc.plate||'')}" placeholder="${sc.plate?'':'ex. B123ABC'}" autocapitalize="characters" required><label class="inl" style="gap:6px;font-size:12.5px;text-transform:none;letter-spacing:0;color:var(--ink);margin-top:4px"><input type="checkbox" id="nPlateOk" style="min-width:0;width:16px;height:16px"> <b>Am verificat numărul pe camion</b>${sc.plate?' (corectează-l dacă diferă)':''}</label></div>
+      <div class="f"><label>Nr. auto văzut pe camion *</label><input id="nPlate" class="plateIn" value="${esc(sc.plate||'')}" placeholder="${sc.plate?'':'ex. B123ABC'}" autocapitalize="characters" required><label class="inl" style="gap:6px;font-size:12.5px;text-transform:none;letter-spacing:0;color:var(--ink);margin-top:4px"><input type="checkbox" id="nPlateOk" ${sc.plateConfirmedWhere==='gate'&&sc.plate?'checked':''} style="min-width:0;width:16px;height:16px"> <b>Am verificat numărul pe camion</b>${sc.plate?' (corectează-l dacă diferă)':''}</label>${sc.plateConfirmedWhere==='gate'&&sc.plate?`<div class="pref" style="color:var(--ok)">✔ confirmat la poartă de ${esc(sc.plateConfirmedBy||'')} la ${fmtTime(sc.plateConfirmedAt)}</div>`:''}</div>
       <div class="f"><label>Operator</label><select id="nOp"><option value="">—</option>${opNames().map(o=>`<option ${o===meName?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
     </div>
     <p class="muted" style="margin:0;font-size:12.5px">Numărul de paleți programat este doar orientativ: după numărare, introdu <b>numărul real</b> pe cardul recepției. Fără el recepția nu poate fi terminată.</p>
@@ -1471,7 +1492,7 @@ function startFromSchedule(sc){
     if(!$('#nPlateOk').checked){toast('Bifează că ai verificat numărul auto pe camion — recepția nu pornește fără confirmare');$('#nPlateOk').focus();return}
     const planned=sc.plate||'';
     newReception({supplier:sup,plate,platePlanned:planned,operator:$('#nOp').value,pallets:null,scheduleId:sc.id,plannedSlot:sc.slot,plannedDay:sc.day,plannedPallets:sc.plannedPallets??null,transport:sc.transport||'',project:sc.project||''});
-    if(planned!==plate){sc.platePlanned=planned;sc.plate=plate}sc.plateUnknown=false;sc.plateConfirmedBy=S.me?.name||'?';sc.plateConfirmedAt=Date.now();
+    if(planned!==plate){sc.platePlanned=planned;sc.plate=plate}if(planned!==plate||sc.plateConfirmedWhere!=='gate'){sc.plateConfirmedBy=S.me?.name||'?';sc.plateConfirmedAt=Date.now();sc.plateConfirmedWhere='warehouse'}sc.plateUnknown=false;
     if(!sc.arrivedAt)sc.arrivedAt=Date.now();logStatus(sc,'receiving');Store.saveSched(sc);
     closeModal();switchTab('active');
   });
