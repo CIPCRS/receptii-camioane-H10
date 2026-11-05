@@ -503,7 +503,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.7.0';
+const APP_VERSION = '3.8.0';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -1364,7 +1364,7 @@ function renderSchedule(){
       <td>${esc(sc.contact||'')}${sc.incoterms?`<div class="muted" style="font-size:11px">${esc(sc.incoterms)}</div>`:''}</td>
       <td>${S.canRecv&&WH_STATUSES.includes(st)?`<select class="rosel" data-sstatus title="Status camion">${WH_STATUSES.map(k=>`<option value="${k}" ${k===st?'selected':''}>${SCHED_STATUS[k]}</option>`).join('')}</select>`:`<span class="st ${st}">${SCHED_STATUS[st]}</span>`}${st==='onhold'&&sc.holdReason?`<div class="muted" style="font-size:11px;color:var(--warn)">${esc(sc.holdReason)}${sc.holdAt?' · '+fmtTime(sc.holdAt):''}</div>`:''}${st==='cancelled'&&sc.cancelledBy?`<div class="muted" style="font-size:11px">de ${esc(sc.cancelledBy)} · ${fmtDate(sc.cancelledAt)} ${fmtTime(sc.cancelledAt)}</div>`:''}${sc.gateIn?`<div style="margin-top:3px">${gateTag(sc)}</div>`:''}${sc.arrivedAt?`<div class="muted mono" style="font-size:11px">sosit ${fmtTime(sc.arrivedAt)}</div>`:''}${r?`<div class="muted mono" style="font-size:11px">${fmtTime(r.startedAt)}${r.finishedAt?'–'+fmtTime(r.finishedAt):''}</div>`:''}</td>
       <td class="obs">${esc(sc.obs||'')}</td>
-      <td style="white-space:nowrap">${S.canRecv&&['planned','arrived','onhold'].includes(st)?`<button class="btn sm ok" data-sact="start" title="Pornește recepția">▶</button> `:''}${S.canPlan?`<button class="btn sm" data-sact="edit" title="Editează">✎</button>`:''}</td>
+      <td style="white-space:nowrap">${S.canRecv&&['planned','arrived','onhold'].includes(st)?`<button class="btn sm ok" data-sact="start" title="Pornește recepția">▶</button> `:''}${S.canPlan?(canEditSched(sc)?`<button class="btn sm" data-sact="edit" title="Editează">✎</button>`:`<span class="muted" title="Programată de ${esc(sc.createdBy||'alt planificator')} — doar el sau planificatorul admin o pot modifica" style="font-size:14px;cursor:help">🔒</span>`):''}</td>
     </tr>`}).join('');
 }
 
@@ -1426,7 +1426,7 @@ function openSchedModal(sc){
         if(!confirm('Slotul '+slotLabel(d.slot)+' este deja ocupat de '+(t.supplier||'alt camion')+(t.plate?' ('+t.plate+')':'')+'. Programezi al doilea camion în același slot?'))return}}
     const urg=$('#scUrg').checked;const why=($('#scUrgWhy').value||'').trim();
     if(urg&&!why){toast('Scrie de ce este urgent camionul');$('#scUrgWhy').focus();return}
-    const obj=isNew?{id:'s'+uid(),status:'planned',createdAt:Date.now(),createdBy:S.me?.name||S.me?.email||'?',statusLog:[{s:'planned',at:Date.now(),by:S.me?.name||'?'}],...d}:{...x,...d};
+    const obj=isNew?{id:'s'+uid(),status:'planned',createdAt:Date.now(),createdBy:S.me?.name||S.me?.email||'?',createdByEmail:S.me?.email||null,statusLog:[{s:'planned',at:Date.now(),by:S.me?.name||'?'}],...d}:{...x,...d};
     if(!isNew&&$('#scSt')&&$('#scSt').value!==x.status){logStatus(obj,$('#scSt').value,$('#scSt').value==='onhold'?($('#scHoldWhy')?.value||'').trim():undefined)}
     if(urg){if(!obj.urgent){obj.urgentAt=Date.now();obj.urgentBy=S.me?.name||'?'}obj.urgent=true;obj.urgentReason=why;
       const rk=$('#scUrgRank');if(S.canRank&&rk&&rk.value!=='')obj.urgentRank=+rk.value;
@@ -1476,12 +1476,15 @@ function startFromSchedule(sc){
     closeModal();switchTab('active');
   });
 }
+/* o programare o modifică doar cine a făcut-o; planificatorul admin și administratorul pe toate */
+function ownsSched(sc){if(!sc)return false;if(sc.createdByEmail)return sc.createdByEmail===S.me?.email;return !!sc.createdBy&&sc.createdBy===S.me?.name}
+function canEditSched(sc){return S.canRank||(S.canPlan&&ownsSched(sc))}
 function schedAction(sc,a){
   if(!sc)return;
   if(a==='start'||a==='arrived'){if(!S.canRecv){toast('Doar depozitul poate porni recepția / marca sosirea');return}}
   if(a==='start')startFromSchedule(sc);
   if(a==='arrived'){setSchedStatus(sc,'arrived')}
-  if(a==='edit'){if(!S.canPlan){toast('Doar planificatorii pot modifica programările');return}openSchedModal(sc)}
+  if(a==='edit'){if(!S.canPlan){toast('Doar planificatorii pot modifica programările');return}if(!canEditSched(sc)){toast('Programarea a fost făcută de '+(sc.createdBy||'alt planificator')+' — doar el sau planificatorul admin o pot modifica');return}openSchedModal(sc)}
   if(a==='up'||a==='down'){if(!S.canRank){toast('Doar planificatorul admin poate ordona urgențele');return}const l=urgentList(sc.day);const i=l.findIndex(x=>x.id===sc.id);setUrgentRank(sc,(i<0?l.length:i)+(a==='up'?0:2))}
 }
 $('#plannedList').addEventListener('click',e=>{const a=e.target.closest('[data-sact]')?.dataset.sact;if(!a)return;schedAction(schedOf(e.target.closest('[data-sched]').dataset.sched),a)});
@@ -1499,7 +1502,7 @@ function setSchedStatus(sc,st){
   logStatus(sc,st);Store.saveSched(sc);toast('Status: '+SCHED_STATUS[st]+(st==='arrived'?' '+fmtTime(sc.arrivedAt):'')+(st==='noshow'?' — camionul rămâne în tabul Programări':''));
 }
 $('#schedBody').addEventListener('click',e=>{if(e.target.closest('select'))return;const a=e.target.closest('[data-sact]')?.dataset.sact;const tr=e.target.closest('[data-sid]');if(!tr)return;
-  if(a)schedAction(schedOf(tr.dataset.sid),a);else if(S.canPlan)openSchedModal(schedOf(tr.dataset.sid))});
+  if(a)schedAction(schedOf(tr.dataset.sid),a);else if(S.canPlan)schedAction(schedOf(tr.dataset.sid),'edit')});
 $('#btnSchedNew').addEventListener('click',()=>{if(!S.canPlan){toast('Doar planificatorii pot adăuga programări');return}openSchedModal(null)});
 async function setSchedDay(k){S.schedDay=k;
   if(k<shiftDay(opKey(Date.now()),-3)&&!S.schedExtra.some(x=>x.day===k)){
