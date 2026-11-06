@@ -505,7 +505,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.10.3';
+const APP_VERSION = '3.10.4';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -712,7 +712,7 @@ function onLogin(user){
   S.me=S.operators.find(o=>o.email===user.email)||{name:user.email.split('@')[0],email:user.email};
   applyRoles();
   $('#login').hidden=true;$('#app').hidden=false;
-  subscribe();setTimeout(checkForcedPin,800);
+  subscribe();   // verificarea PIN-ului inițial se face abia după ce sosește lista pinstate (nu după un timp fix)
   clearInterval(lateTimer);lateTimer=setInterval(checkLate,30000);setTimeout(checkLate,2500);
   if(S.canPlan&&'Notification' in window&&Notification.permission==='default'){try{Notification.requestPermission()}catch(_){}}
 }
@@ -761,7 +761,11 @@ function subscribe(){
   unsubs.push(fs.collection('schedules').where('day','>=',fromDay).onSnapshot(snap=>{
     S.schedules=snap.docs.map(d=>d.data());scheduleRender();
   },e=>{console.error(e);toast('Eroare la citirea programărilor: '+e.code)}));
-  unsubs.push(fs.collection('pinstate').onSnapshot(snap=>{S.pinState={};snap.docs.forEach(d=>{S.pinState[d.id]=d.data()});scheduleRender();checkForcedPin()},()=>{}));
+  S.pinStateLoaded=false;
+  unsubs.push(fs.collection('pinstate').onSnapshot(snap=>{S.pinState={};snap.docs.forEach(d=>{S.pinState[d.id]=d.data()});S.pinStateLoaded=true;scheduleRender();
+    const me=S.operators.find(o=>o.email===S.me?.email);
+    if(forcedPinOpen&&me&&!pinPending(me)){forcedPinOpen=false;closeModal()}   // PIN-ul fusese deja schimbat (ex. de pe alt dispozitiv) — nu mai cerem
+    checkForcedPin()},()=>{}));
   unsubs.push(fs.doc('public/operators').onSnapshot(snap=>{
     if(snap.exists){const x=snap.data();S.operators=x.list||[];S.admins=x.admins||[];S.planners=x.planners||[];S.rolesMissing=!x.roles;
       if(S.me){const m=S.operators.find(o=>o.email===S.me.email);if(m)S.me=m;applyRoles()}}
@@ -1955,7 +1959,7 @@ document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>swit
 function pinPending(o){return !!(o&&o.mustChangePin&&!(S.pinState[o.email]&&S.pinState[o.email].changedAt))}
 let forcedPinOpen=false;
 function checkForcedPin(){
-  if(!S.me||!auth||!auth.currentUser||forcedPinOpen)return;
+  if(!S.me||!auth||!auth.currentUser||forcedPinOpen||!S.pinStateLoaded)return;   // așteptăm datele din server, altfel am cere PIN nou degeaba
   const me=S.operators.find(o=>o.email===S.me.email);if(!pinPending(me))return;
   forcedPinOpen=true;
   openModal(`<div class="bh"><h2>Alege-ți PIN-ul</h2></div>
@@ -1974,7 +1978,7 @@ function checkForcedPin(){
     try{await auth.currentUser.updatePassword(a);
       await fs.doc('pinstate/'+me.email).set({email:me.email,uid:auth.currentUser.uid,changedAt:Date.now()});
       lastLoginPin='';forcedPinOpen=false;closeModal();toast('PIN salvat. Îl poți schimba oricând din Setări.')}
-    catch(ex){err.textContent=friendlyAuthError(ex)+(ex.code==='auth/requires-recent-login'?' Ieși și conectează-te din nou, apoi alege PIN-ul.':'')}
+    catch(ex){err.textContent=(ex.code==='permission-denied'?'PIN-ul a fost schimbat, dar nu am putut înregistra confirmarea (regulile Firestore nu au blocul „pinstate”). Anunță administratorul.':friendlyAuthError(ex))+(ex.code==='auth/requires-recent-login'?' Ieși și conectează-te din nou, apoi alege PIN-ul.':'')}
   });
   setTimeout(()=>{const i=$('#fp1');if(i)i.focus()},50);
 }
