@@ -304,6 +304,7 @@ input,select,textarea{font-size:16px}
 .prow .pact{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 .prow.late{border-color:var(--bad)}
 .st.late{background:var(--bad);color:#fff;font-weight:700}
+.st.noshow.auto{background:var(--surface2);color:var(--ink2);border:1px dashed var(--line2)}
 .prow.urgent{border-color:var(--bad);box-shadow:inset 3px 0 0 var(--bad)}
 .urg{display:inline-flex;align-items:center;gap:4px;background:var(--bad);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;letter-spacing:.04em;white-space:nowrap}
 .urgwhy{font-size:12.5px;color:var(--bad);margin-top:2px}
@@ -504,7 +505,7 @@ tr.urgentrow td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
 /* ============================================================
    Recepții camioane — aplicație PWA cu Firebase (Auth + Firestore)
    ============================================================ */
-const APP_VERSION = '3.10.2';
+const APP_VERSION = '3.10.3';
 const ROLES={admin:'Administrator',planner_admin:'Planificator admin',planner:'Planificator',warehouse:'Depozit',viewer:'Vizualizare',gate:'Portar'};
 const GATE_LABEL={in:'Intrat în curte',out:'Ieșit din curte',undo_in:'Anulat „Intrat în curte”',undo_out:'Anulat „Ieșit din curte”'};
 const roleOf=o=>o&&(o.role||(o.admin?'admin':o.planner?'planner':'warehouse'));
@@ -1032,7 +1033,7 @@ function slotStartTs(day,slot){return dayKeyToTs(day)-12*3600000+slot*3600000+(s
 function isLate(sc){return schedStatus(sc)==='planned'&&!sc.gateIn&&!sc.arrivedAt&&Date.now()>slotStartTs(sc.day,sc.slot)}
 /* status efectiv afișat: urgent întârziat → roșu „Întârziat…”; neurgent întârziat → „Nu s-a prezentat la descărcare” (automat, până când colegii aleg alt status) */
 function effStatus(sc){const st=schedStatus(sc);if(st==='planned'&&isLate(sc))return sc.urgent?'late':'noshow';return st}
-function statusPill(sc,st,size){const e=effStatus(sc);return e==='late'?`<span class="st late" ${size?'style="font-size:11px"':''} title="Ora slotului a trecut fără intrare pe poartă / sosire la depozit">${LATE_LABEL}</span>`:`<span class="st ${e}" ${size?'style="font-size:11px"':''}${e==='noshow'&&st==='planned'?' title="Automat: ora slotului a trecut fără sosire — alege alt status dacă e cazul"':''}>${SCHED_STATUS[e]}</span>`}
+function statusPill(sc,st,size){const e=effStatus(sc);return e==='late'?`<span class="st late" ${size?'style="font-size:11px"':''} title="Ora slotului a trecut fără intrare pe poartă / sosire la depozit">${LATE_LABEL}</span>`:`<span class="st ${e}${e==='noshow'&&st==='planned'?' auto':''}" ${size?'style="font-size:11px"':''}${e==='noshow'&&st==='planned'?' title="Automat: ora slotului a trecut fără sosire — alege alt status dacă e cazul"':''}>${SCHED_STATUS[e]}</span>`}
 /* alerta planificatorului: camioanele lui care au întârziat — banner roșu + sunet, cât timp are aplicația deschisă */
 let lateTimer=null,lateKnown=new Set();
 function lateSeen(){try{return new Set(JSON.parse(localStorage.getItem('lateSeen')||'[]'))}catch(_){return new Set()}}
@@ -1383,7 +1384,7 @@ function renderPlanned(){
       <div class="pmain">${urgentBadge(sc)} <b>${esc(sc.supplier||'—')}</b> ${plateCell(sc,true)}
         ${sc.urgent&&sc.urgentReason?`<div class="urgwhy">${esc(sc.urgentReason)}</div>`:''}${st==='onhold'&&sc.holdReason?`<div class="urgwhy" style="color:var(--warn)">On hold: ${esc(sc.holdReason)}</div>`:''}
         <div class="pmeta">${late||auto?statusPill(sc,st,true):''}${gateTag(sc)}<span>Paleți programați: <b>${sc.plannedPallets??'—'}</b></span>${sc.transport?`<span>${esc(sc.transport)}</span>`:''}${sc.project?`<span>${esc(sc.project)}${sc.type?' · '+esc(sc.type):''}</span>`:''}${sc.contact?`<span>contact ${esc(sc.contact)}</span>`:''}${sc.obs?`<span style="color:var(--warn)">${esc(sc.obs)}</span>`:''}</div></div>
-      <div class="pact">${S.canRank&&sc.urgent?`<span class="rk"><button type="button" data-sact="up" title="Mai sus în urgențele zilei" ${uIdx<=0?'disabled':''}>▲</button><button type="button" data-sact="down" title="Mai jos în urgențele zilei" ${uIdx>=dayU.length-1?'disabled':''}>▼</button></span>`:''}${S.canRecv?`<select class="rosel" data-sstatus title="Status camion">${WH_STATUSES.map(k=>`<option value="${k}" ${k===st?'selected':''}>${SCHED_STATUS[k]}${k==='arrived'&&st==='arrived'&&sc.arrivedAt?' '+fmtTime(sc.arrivedAt):''}</option>`).join('')}</select>`:`<span class="st ${st}">${SCHED_STATUS[st]}${st==='arrived'&&sc.arrivedAt?' '+fmtTime(sc.arrivedAt):''}</span>`}
+      <div class="pact">${S.canRank&&sc.urgent?`<span class="rk"><button type="button" data-sact="up" title="Mai sus în urgențele zilei" ${uIdx<=0?'disabled':''}>▲</button><button type="button" data-sact="down" title="Mai jos în urgențele zilei" ${uIdx>=dayU.length-1?'disabled':''}>▼</button></span>`:''}${S.canRecv?`<select class="rosel" data-sstatus title="Status camion">${WH_STATUSES.map(k=>`<option value="${k}" ${k===(auto?'noshow':st)?'selected':''}>${SCHED_STATUS[k]}${k==='arrived'&&st==='arrived'&&sc.arrivedAt?' '+fmtTime(sc.arrivedAt):''}</option>`).join('')}</select>`:`<span class="st ${st}">${SCHED_STATUS[st]}${st==='arrived'&&sc.arrivedAt?' '+fmtTime(sc.arrivedAt):''}</span>`}
         ${S.canRecv?`<button class="btn sm ok" data-sact="start">▶ Pornește recepția</button>`:''}</div>
     </div>`}).join('');
 }
